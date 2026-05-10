@@ -146,8 +146,11 @@
 .content-col{ flex: 1; min-width: 0; }
 
 /* Hero */
-.hero{ padding: var(--sp-4) var(--sp-5); }
-.hero-inner{ max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: 1.2fr 1fr; gap: var(--sp-7); align-items: start; }
+/* padding 上 sp-4 / 下 sp-2：收紧 hero 和下面 main 的 padding，让"录入档案"卡紧贴顶部介绍。 */
+.hero{ padding: var(--sp-4) var(--sp-5) var(--sp-2); }
+/* align-items 默认为 stretch → 右侧玻璃卡的高度会自动撑到与左列一致，
+   这样卡的底边就能紧贴下面的能力展示三栏，不再出现"右侧卡偏上、下方留空"的间隙感。 */
+.hero-inner{ max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: 1.2fr 1fr; gap: var(--sp-7); align-items: stretch; }
 .hero-kicker{ display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 12px; border-radius: 999px; background: rgba(14,165,164,0.12); color: var(--accent-ink); font: 600 var(--fz-xs)/1 var(--font-ui); letter-spacing: 0.04em; }
 .hero-title{ margin: var(--sp-3) 0 var(--sp-3); font-size: clamp(36px, 4.8vw, 56px); font-family: var(--font-display); font-weight: 600; line-height: 1.12; color: var(--ink-1); letter-spacing: -0.02em; white-space: nowrap; }
 .hero-title em{ color: var(--accent); font-style: normal; }
@@ -185,10 +188,11 @@
 }
 .stat-num{ font-family: var(--font-display); font-size: 30px; font-weight: 600; color: var(--ink-1); letter-spacing: -0.02em; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .stat-lbl{ font: 500 var(--fz-xs)/1.3 var(--font-ui); color: var(--ink-4); margin-top: 6px; letter-spacing: 0.03em; white-space: nowrap; }
-.hero-lead{ display: flex; flex-direction: column; gap: 4px; padding: var(--sp-3); border-left: 3px solid var(--accent); background: rgba(14,165,164,0.06); border-radius: 0 var(--r-s) var(--r-s) 0; }
+.hero-lead{ display: flex; flex-direction: column; gap: 4px; padding: var(--sp-3); border-left: 3px solid var(--accent); background: rgba(14,165,164,0.06); border-radius: 0 var(--r-s) var(--r-s) 0; margin-top: auto; }
 
 /* Main */
-.main{ flex: 1; padding: var(--sp-4) var(--sp-5) var(--sp-8); }
+/* padding-top 改成 sp-2，配合上面 .hero 的 padding-bottom: sp-2，让录入卡和 hero 之间只剩 16px。 */
+.main{ flex: 1; padding: var(--sp-2) var(--sp-5) var(--sp-8); }
 .card{ padding: var(--sp-5) var(--sp-6); }
 .card-head{ display: flex; align-items: center; gap: var(--sp-3); margin-bottom: var(--sp-5); }
 .card-head-icon{ width: 40px; height: 40px; border-radius: var(--r-s); display: inline-flex; align-items: center; justify-content: center; background: rgba(14,165,164,0.12); color: var(--accent-ink); }
@@ -320,8 +324,8 @@
 }
 @media (max-width: 640px){
   .sidebar{ padding: 8px var(--sp-3); gap: var(--sp-2); }
-  .hero{ padding: var(--sp-6) var(--sp-3) var(--sp-5); }
-  .main{ padding: var(--sp-5) var(--sp-3) var(--sp-8); }
+  .hero{ padding: var(--sp-4) var(--sp-3) var(--sp-2); }
+  .main{ padding: var(--sp-2) var(--sp-3) var(--sp-8); }
   .card{ padding: var(--sp-4); }
 }
 
@@ -334,7 +338,7 @@
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: var(--sp-4);
-  margin-top: var(--sp-4);
+  margin-top: var(--sp-3);
 }
 @media (max-width: 900px){ .feature-grid{ grid-template-columns: 1fr; } }
 .feature-card{
