@@ -86,6 +86,7 @@
   color: #E2E8F0;
   display: inline-flex; align-items: center; justify-content: center;
   cursor: pointer;
+  text-decoration: none;
 }
 .mobile-appbar .ma-btn:active{ background: rgba(255,255,255,0.12); }
 .mobile-appbar .ma-title{
