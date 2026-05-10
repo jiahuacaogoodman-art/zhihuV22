@@ -348,7 +348,7 @@
 <main class="main container">
 
   <!-- 录入 -->
-  <section id="tab-add" class="glass card" data-aos="fade-up" data-aos-duration="600">
+  <section id="tab-add" class="glass card">
     <div class="card-head">
       <div class="card-head-icon"><span class="icon" data-icon="plus"></span></div>
       <div class="card-head-text"><h2>录入老人档案</h2><p>填写完整信息，用于后续护理和 AI 建议参考</p></div>
@@ -395,7 +395,7 @@
   </section>
 
   <!-- 档案列表 -->
-  <section id="tab-list" class="glass card" data-aos="fade-up" data-aos-duration="600" style="display:none;">
+  <section id="tab-list" class="glass card" style="display:none;">
     <div class="card-head">
       <div class="card-head-icon"><span class="icon" data-icon="users"></span></div>
       <div class="card-head-text"><h2>档案管理</h2><p>查看、编辑、删除老人档案</p></div>
@@ -408,7 +408,7 @@
   </section>
 
   <!-- 病历上传 -->
-  <section id="tab-archive" class="glass card" data-aos="fade-up" data-aos-duration="600" style="display:none;">
+  <section id="tab-archive" class="glass card" style="display:none;">
     <div class="card-head">
       <div class="card-head-icon"><span class="icon" data-icon="upload"></span></div>
       <div class="card-head-text"><h2>病历上传</h2><p>上传门诊、住院等病历照片，系统会自动识别文字并归入该老人档案</p></div>
@@ -439,7 +439,7 @@
   </section>
 
   <!-- AI 护理建议 -->
-  <section id="tab-dec" class="glass card" data-aos="fade-up" data-aos-duration="600" style="display:none;">
+  <section id="tab-dec" class="glass card" style="display:none;">
     <div class="card-head">
       <div class="card-head-icon"><span class="icon" data-icon="sparkles"></span></div>
       <div class="card-head-text"><h2>AI 护理建议</h2><p>AI 会结合这位老人的档案、病历和过往护理记录给出建议，并标注每条建议来自哪一份材料</p></div>
@@ -478,7 +478,7 @@
   </section>
 
   <!-- 操作记录 -->
-  <section id="tab-hist" class="glass card" data-aos="fade-up" data-aos-duration="600" style="display:none;">
+  <section id="tab-hist" class="glass card" style="display:none;">
     <div class="card-head">
       <div class="card-head-icon"><span class="icon" data-icon="history"></span></div>
       <div class="card-head-text"><h2>操作记录</h2><p>最近 50 条本机操作</p></div>
@@ -592,15 +592,17 @@ document.addEventListener('DOMContentLoaded', ()=>{
       });
 
       // Section 卡片滚入动效（需要 ScrollTrigger）
-      if(window.ScrollTrigger){
-        gsap.registerPlugin(window.ScrollTrigger);
-        document.querySelectorAll('.main .glass.card').forEach(card => {
-          gsap.from(card, {
-            opacity: 0, y: 40, duration: 0.7, ease: 'power3.out',
-            scrollTrigger: { trigger: card, start: 'top 85%', once: true }
-          });
-        });
-      }
+      // 注意：tab 卡片由 switchTab() 的 display 切换控制可见性，
+      //       不能用 scrollTrigger 初始化 opacity:0，否则隐藏的 tab 再显示时会透明。
+      // if(window.ScrollTrigger){
+      //   gsap.registerPlugin(window.ScrollTrigger);
+      //   document.querySelectorAll('.main .glass.card').forEach(card => {
+      //     gsap.from(card, {
+      //       opacity: 0, y: 40, duration: 0.7, ease: 'power3.out',
+      //       scrollTrigger: { trigger: card, start: 'top 85%', once: true }
+      //     });
+      //   });
+      // }
     }).catch(()=>{});
   }
 });
