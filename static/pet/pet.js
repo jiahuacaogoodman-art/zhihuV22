@@ -201,6 +201,14 @@
         this.hide(false);
       }
 
+      // 窗口变化时，若未被用户拖过，就重新吸附到槽位
+      window.addEventListener('resize', () => {
+        const hasSavedPos = this._pos && this._pos.x != null && this._pos.y != null;
+        if (hasSavedPos) return;
+        const slot = document.getElementById('sidebarPetSlot');
+        if (slot && window.innerWidth > 960) this._dockToSlot(slot);
+      });
+
       // 拖拽
       this._bindDrag();
 
@@ -450,13 +458,32 @@
       try { localStorage.setItem(LS_KEY, JSON.stringify(this._pos)); } catch { }
     }
     _applyPos() {
-      if (this._pos && this._pos.x != null && this._pos.y != null) {
+      // 如果页面上有预留插槽（左下角 sidebar-pet-slot），且用户没拖过，就吸附到插槽位置
+      const slot = document.getElementById('sidebarPetSlot');
+      const hasSavedPos = this._pos && this._pos.x != null && this._pos.y != null;
+      if (slot && !hasSavedPos && window.innerWidth > 960) {
+        this._dockToSlot(slot);
+        return;
+      }
+      if (hasSavedPos) {
         const h = this.host;
         h.style.left = this._pos.x + 'px';
         h.style.top = this._pos.y + 'px';
         h.style.right = 'auto';
         h.style.bottom = 'auto';
       }
+    }
+
+    _dockToSlot(slot) {
+      const h = this.host;
+      const r = slot.getBoundingClientRect();
+      // 把宠物放在槽位中央偏下
+      const x = r.left + (r.width - h.offsetWidth) / 2;
+      const y = r.top + (r.height - h.offsetHeight) / 2 + 6;
+      h.style.left = Math.max(4, x) + 'px';
+      h.style.top = Math.max(4, y) + 'px';
+      h.style.right = 'auto';
+      h.style.bottom = 'auto';
     }
 
     // -------- 显隐 --------
