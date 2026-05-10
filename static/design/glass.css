@@ -3,12 +3,18 @@
    ========================================================================== */
 
 /* ── 背景：ambient svg + 动态 mesh ──────────────────── */
+html{
+  /* 禁止整页纵向回弹（macOS 触控板、iOS 手指下拉时，会把 body 往下拉，
+     露出 ambient 背景/侧栏外的空白；contain 能让边界处的额外滚动事件不再向上冒，none 直接干掉回弹）。 */
+  overscroll-behavior: none;
+}
 body{
   background-color: var(--page-bg);
   color: var(--ink-2);
   font-family: var(--font-ui);
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
+  overscroll-behavior: none;
 }
 
 /* 主背景：ambient 彩图 */

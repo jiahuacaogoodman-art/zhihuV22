@@ -59,7 +59,7 @@ body{ display: flex; flex-direction: column; }
 .search-box{ position: relative; }
 .search-box .icon-s{ position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--ink-4); pointer-events: none; }
 .search-box input{ padding-left: 32px; }
-.pl-body{ flex: 1; overflow-y: auto; padding: var(--sp-2); }
+.pl-body{ flex: 1; overflow-y: auto; padding: var(--sp-2); overscroll-behavior: contain; }
 
 .pt-item{
   display: grid; grid-template-columns: 36px 1fr auto; gap: var(--sp-2);
@@ -79,7 +79,7 @@ body{ display: flex; flex-direction: column; }
 .pt-sub { font: 400 var(--fz-xs)/1.4 var(--font-ui); color: var(--ink-3); margin-top: 2px; }
 
 /* ─── 右侧详情 ─── */
-.panel-detail{ flex: 1; overflow-y: auto; padding: var(--sp-5); display: flex; flex-direction: column; }
+.panel-detail{ flex: 1; overflow-y: auto; padding: var(--sp-5); display: flex; flex-direction: column; overscroll-behavior: contain; }
 .detail-empty{ flex: 1; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: var(--sp-3); color: var(--ink-4); }
 .detail-empty-ico{ width: 72px; height: 72px; border-radius: 50%; background: rgba(14,165,164,0.08); display: flex; align-items: center; justify-content: center; color: var(--accent); }
 
