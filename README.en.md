@@ -122,8 +122,8 @@ Small, local nursing homes share the same three pains:
 
 ```bash
 # 1. Clone & install
-git clone https://github.com/jiahuacaogoodman-art/zhihuV22.git
-cd zhihuV22
+git clone https://github.com/jiahuacaogoodman-art/Zhihu-Yinban.git
+cd Zhihu-Yinban
 
 python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
