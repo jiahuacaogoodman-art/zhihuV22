@@ -122,8 +122,8 @@
 
 ```bash
 # 1. 克隆与安装
-git clone https://github.com/jiahuacaogoodman-art/zhihuV22.git
-cd zhihuV22
+git clone https://github.com/jiahuacaogoodman-art/Zhihu-Yinban.git
+cd Zhihu-Yinban
 
 python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
