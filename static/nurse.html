@@ -25,8 +25,8 @@
 <script defer src="/static/design/icons.js"></script>
 <script defer src="/static/design/dialog.js"></script>
 <script defer src="/static/design/evidence.js"></script>
+<script defer src="/static/design/vendors.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.js"></script>
-<script defer src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
 <script defer src="/static/pet/pet.js"></script>
 <style>
 html, body{ height: 100%; overflow: hidden; }
@@ -736,7 +736,10 @@ loadPts();
 /* ═══════════ 外部库初始化 ═══════════ */
 window.addEventListener('load', () => {
   if(window.AOS){ AOS.init({ once: true, duration: 650, easing: 'ease-out-cubic', offset: 40 }); }
-  if(window.gsap){ gsap.from('.nav', { y: -12, opacity: 0, duration: 0.6, ease: 'power2.out' }); }
+  // GSAP：顶栏入场（通过 ZhVendors 懒加载）
+  const navGsap = () => { if(window.gsap) gsap.from('.nav', { y: -12, opacity: 0, duration: 0.6, ease: 'power2.out' }); };
+  if(window.gsap){ navGsap(); }
+  else if(window.ZhVendors){ window.ZhVendors.load('gsap').then(ok => { if(ok) navGsap(); }).catch(()=>{}); }
   if(window.ZhPet){
     setTimeout(()=> window.ZhPet.say('护工端已就绪，选一位老人开始吧～', { title: '护工模式', duration: 3400 }), 1200);
   }

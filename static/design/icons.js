@@ -1,10 +1,26 @@
-/* === 图标注册表（Lucide 风格内联 SVG）=======================================
-   用法：<i data-icon="user" class="icon"></i>  →  mountIcons() 渲染
-   尺寸由外层 class 控制（.icon / .icon-s / .icon-l）
+/* === 图标系统 · Lucide CDN + 本地 fallback =================================
+   策略：优先走 Lucide Icons（1400+ 高质量开源图标），CDN 加载失败或离线时
+   自动回退到内置的 SVG path 表。
+   使用方式保持不变：<i data-icon="user" class="icon"></i> → ZhIcons.mount()
+   Lucide: https://lucide.dev （ISC License，商用免费）
    ========================================================================== */
 (function(){
-  const P = {
-    // 基础
+  /* ---------- 1. Lucide 名字映射表（本仓库命名 → Lucide 官方命名） -------- */
+  const LUCIDE_NAME = {
+    'close':     'x',
+    'alert':     'triangle-alert',
+    'edit':      'pencil',
+    'trash':     'trash-2',
+    'chat':      'message-square',
+    'refresh':   'refresh-cw',
+    'arrow-right': 'arrow-right',
+    'chevron-down': 'chevron-down',
+    'chevron-right': 'chevron-right',
+    'shield-check': 'shield-check',
+  };
+
+  /* ---------- 2. 离线 fallback：内置最常用的 40 个 SVG path ----------- */
+  const FALLBACK = {
     'home':       '<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2h-4v-6H10v6H6a2 2 0 0 1-2-2z"/>',
     'user':       '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
     'users':      '<circle cx="9" cy="8" r="4"/><path d="M1 21a8 8 0 0 1 16 0"/><path d="M17 3a4 4 0 0 1 0 8"/><path d="M23 21a8 8 0 0 0-6-7.75"/>',
@@ -47,24 +63,74 @@
     'layers':     '<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>',
   };
 
-  function svg(name){
-    const body = P[name];
+  /* ---------- 3. Lucide 动态加载（CDN）---------- */
+  const LUCIDE_URL = 'https://unpkg.com/lucide@0.454.0/dist/umd/lucide.min.js';
+  let lucidePromise = null;
+  function loadLucide(){
+    if(lucidePromise) return lucidePromise;
+    lucidePromise = new Promise((resolve, reject) => {
+      if(window.lucide) return resolve(window.lucide);
+      const s = document.createElement('script');
+      s.src = LUCIDE_URL;
+      s.async = true;
+      s.onload = () => window.lucide ? resolve(window.lucide) : reject(new Error('lucide not ready'));
+      s.onerror = () => reject(new Error('lucide load failed'));
+      // 5s 超时兜底
+      const t = setTimeout(() => reject(new Error('lucide timeout')), 5000);
+      const origResolve = resolve, origReject = reject;
+      resolve = v => { clearTimeout(t); origResolve(v); };
+      reject  = e => { clearTimeout(t); origReject(e); };
+      document.head.appendChild(s);
+    }).catch(e => { console.warn('[ZhIcons] Lucide CDN unavailable, using local fallback:', e.message); return null; });
+    return lucidePromise;
+  }
+
+  /* ---------- 4. 渲染：离线 SVG ---------- */
+  function fallbackSvg(name){
+    const body = FALLBACK[name];
     if(!body) return '';
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
   }
 
-  function mount(root){
-    (root || document).querySelectorAll('[data-icon]').forEach(el=>{
+  /* ---------- 5. 主入口：mount ---------- */
+  async function mount(root){
+    root = root || document;
+    const els = root.querySelectorAll('[data-icon]:not([data-icon-mounted])');
+    if(!els.length) return;
+
+    const lucide = await loadLucide();
+
+    els.forEach(el => {
       const name = el.getAttribute('data-icon');
-      if(!name || el.dataset.iconMounted) return;
-      el.innerHTML = svg(name);
+      if(!name) return;
+      if(lucide && lucide.icons){
+        const lucideName = LUCIDE_NAME[name] || name;
+        // Lucide 用 kebab-case + PascalCase 双向，适配一下
+        const key = lucideName.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+        const iconData = lucide.icons[key] || lucide.icons[lucideName] || null;
+        if(iconData){
+          const svg = lucide.createElement(iconData);
+          svg.setAttribute('stroke-width', '1.5');
+          svg.setAttribute('aria-hidden', 'true');
+          el.replaceChildren(svg);
+          el.dataset.iconMounted = '1';
+          return;
+        }
+      }
+      // fallback
+      el.innerHTML = fallbackSvg(name);
       el.dataset.iconMounted = '1';
     });
   }
 
-  window.ZhIcons = { mount, svg };
+  /* ---------- 6. 暴露 API ---------- */
+  window.ZhIcons = {
+    mount,
+    svg: fallbackSvg,   // 同步版本（离线）
+  };
+
   if(document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', ()=>mount());
+    document.addEventListener('DOMContentLoaded', () => mount());
   }else{
     mount();
   }

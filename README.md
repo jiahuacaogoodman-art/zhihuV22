@@ -173,6 +173,20 @@ uvicorn main:app --host 0.0.0.0 --port 8000
 - `static/design/glass.css` — 玻璃卡片、深色 nav 玻璃、浮动 orb
 - `static/design/ui.css` — 按钮、输入、标签、对话、证据面板
 
+### 7.1 外部资源（开源引入，不闭门造车）
+
+| 资源 | 用处 | License | 加载方式 |
+|---|---|---|---|
+| [Lucide Icons](https://lucide.dev) | 1400+ 线性图标库，替代手搓 SVG | ISC | CDN + 本地 40 个 fallback |
+| [GSAP 3.12](https://gsap.com) | 卡片入场、数字滚动、ScrollTrigger 滚入动效 | Standard (免费) | CDN |
+| [Lottie Player](https://lottiefiles.com) | hero 区矢量动画 | MIT | CDN |
+| [Hero Patterns](https://heropatterns.com) | 玻璃背景的细密点阵纹理 | CC BY 4.0 | 内联 SVG |
+| [Inter + Noto Serif SC](https://fonts.google.com) | 主力字体 + 中文显示字体 | OFL | Google Fonts CDN |
+
+所有 CDN 带 **6s 超时兜底**，在 `static/design/vendors.js` 里按需懒加载，加载失败会自动降级为 CSS 原生动画，不阻塞业务。
+
+**离线部署**：执行一次 `./scripts/fetch_vendors.sh`（可选，见下方）把 CDN 资源下载到 `static/vendor/`，然后改引用路径即可完全离线。
+
 ---
 
 ## 8. 边界声明

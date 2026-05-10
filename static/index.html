@@ -25,11 +25,11 @@
 <script defer src="/static/design/icons.js"></script>
 <script defer src="/static/design/dialog.js"></script>
 <script defer src="/static/design/evidence.js"></script>
+<script defer src="/static/design/vendors.js"></script>
 
-<!-- 外部 JS 库 -->
+<!-- 外部 JS 库（AOS 滚动动画 / Typed.js 打字机。GSAP 由 vendors.js 懒加载，不在此重复引入） -->
 <script defer src="https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/typed.js@2.1.0/dist/typed.umd.js"></script>
-<script defer src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
 <script defer src="/static/pet/pet.js"></script>
 <style>
 /* ---- 页面级微调 ---- */
@@ -68,8 +68,21 @@
 .hero-sub{ font: 400 17px/1.8 var(--font-ui); color: var(--ink-3); max-width: 52ch; }
 .hero-actions{ margin-top: var(--sp-5); display: flex; gap: var(--sp-2); }
 
-.hero-panel{ padding: var(--sp-5); display: flex; flex-direction: column; gap: var(--sp-4); }
+.hero-panel{ padding: var(--sp-5); display: flex; flex-direction: column; gap: var(--sp-4); position: relative; }
 .hero-panel-title{ display: flex; align-items: center; gap: 8px; color: var(--ink-3); }
+/* 右上角小 Lottie 动画，作为玻璃卡的视觉点缀 */
+.hero-lottie{
+  position: absolute;
+  top: -24px;
+  right: -24px;
+  width: 120px;
+  height: 120px;
+  pointer-events: none;
+  opacity: 0.85;
+  z-index: 1;
+}
+.hero-lottie lottie-player{ width: 100%; height: 100%; }
+@media (max-width: 640px){ .hero-lottie{ width: 80px; height: 80px; top: -12px; right: -12px; } }
 .stat-grid{ display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--sp-3); }
 .stat{ padding: var(--sp-3); border-radius: var(--r-m); background: rgba(255,255,255,0.65); border: 1px solid rgba(15,23,42,0.05); }
 .stat-num{ font-family: var(--font-display); font-size: 32px; font-weight: 600; color: var(--ink-1); letter-spacing: -0.02em; line-height: 1; }
@@ -272,10 +285,21 @@
       </div>
     </div>
     <div class="glass hero-panel" data-aos="fade-left" data-aos-duration="800" data-aos-delay="120">
+      <!-- Lottie 矢量动画（外部资源，CDN 加载；离线时 CSS 降级） -->
+      <div class="hero-lottie" aria-hidden="true">
+        <lottie-player
+          id="heroLottie"
+          background="transparent"
+          speed="1"
+          loop
+          autoplay
+          src="https://lottie.host/4d0d0e50-6fbf-4b28-a5a1-1c8c6b0e7bfd/Uy8hYcgtDl.json">
+        </lottie-player>
+      </div>
       <div class="hero-panel-title label"><i class="fa-solid fa-layer-group" style="margin-right:6px"></i>系统概览</div>
       <div class="stat-grid">
-        <div class="stat"><div class="stat-num" id="statTotal">0</div><div class="stat-lbl">老人档案</div></div>
-        <div class="stat"><div class="stat-num" id="statDec">0</div><div class="stat-lbl">今日 AI 建议</div></div>
+        <div class="stat"><div class="stat-num" id="statTotal" data-target="0">0</div><div class="stat-lbl">老人档案</div></div>
+        <div class="stat"><div class="stat-num" id="statDec"   data-target="0">0</div><div class="stat-lbl">今日 AI 建议</div></div>
         <div class="stat"><div class="stat-num" id="statTime">—</div><div class="stat-lbl">响应时间</div></div>
       </div>
       <div class="hero-lead">
@@ -490,6 +514,24 @@ const esc = v => String(v==null?'':v).replace(/[&<>"']/g, c=>({ '&':'&amp;','<':
 const gv = id => (document.getElementById(id)?.value || '').trim() || null;
 const nv = id => { const v = parseFloat(document.getElementById(id)?.value); return isNaN(v) ? null : v; };
 
+/* ═══════════ helpers ═══════════ */
+function animateNumber(id, val){
+  const el = document.getElementById(id);
+  if(!el) return;
+  const target = parseInt(val) || 0;
+  el.dataset.target = target;
+  if(window.gsap){
+    const current = parseInt(el.textContent) || 0;
+    const obj = { n: current };
+    window.gsap.to(obj, {
+      n: target, duration: 0.8, ease: 'power2.out',
+      onUpdate: () => { el.textContent = Math.round(obj.n); }
+    });
+  }else{
+    el.textContent = target;
+  }
+}
+
 /* ═══════════ TABS ═══════════ */
 function switchTab(tab){
   document.querySelectorAll('.nav-tab').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
@@ -521,6 +563,46 @@ document.addEventListener('DOMContentLoaded', ()=>{
     });
   }
   loadPatients();
+
+  /* ── 外部资源引入（CDN）：GSAP 入场动效 + Lottie 动画播放器 ── */
+  if(window.ZhVendors){
+    // Lottie：hero 右上角动画
+    window.ZhVendors.load('lottie').catch(()=>{});
+
+    // GSAP：卡片/按钮入场 + 数字 counter
+    window.ZhVendors.loadAll(['gsap', 'scrollTrigger']).then(results => {
+      if(!results[0] || !window.gsap) return;  // CDN 失败就跳过动画
+      const gsap = window.gsap;
+
+      // Hero 入场：左到右淡入 + 上移
+      gsap.from('.hero-title', { opacity: 0, y: 30, duration: 0.9, ease: 'power3.out' });
+      gsap.from('.hero-sub',   { opacity: 0, y: 20, duration: 0.9, delay: 0.15, ease: 'power3.out' });
+      gsap.from('.hero-actions .btn', { opacity: 0, y: 16, duration: 0.6, delay: 0.35, stagger: 0.08, ease: 'back.out(1.4)' });
+      gsap.from('.hero-panel', { opacity: 0, x: 40, duration: 0.9, delay: 0.2, ease: 'power3.out' });
+
+      // 数字 counter：以 data-target 为目标值做 1.2s 滚动
+      document.querySelectorAll('[data-target]').forEach(el => {
+        const target = parseInt(el.dataset.target) || 0;
+        if(target === 0){ return; }
+        const obj = { n: 0 };
+        gsap.to(obj, {
+          n: target, duration: 1.2, delay: 0.4, ease: 'power2.out',
+          onUpdate: () => { el.textContent = Math.round(obj.n); }
+        });
+      });
+
+      // Section 卡片滚入动效（需要 ScrollTrigger）
+      if(window.ScrollTrigger){
+        gsap.registerPlugin(window.ScrollTrigger);
+        document.querySelectorAll('.main .glass.card').forEach(card => {
+          gsap.from(card, {
+            opacity: 0, y: 40, duration: 0.7, ease: 'power3.out',
+            scrollTrigger: { trigger: card, start: 'top 85%', once: true }
+          });
+        });
+      }
+    }).catch(()=>{});
+  }
 });
 
 /* ═══════════ 录入 ═══════════ */
@@ -546,6 +628,7 @@ async function submitPatient(){
     ['patient_id','name','age','birth_date','id_card','admission_date','emergency_contact','emergency_phone','emergency_relation','height_cm','weight_kg','medical_history','allergy','diet_restriction','notes'].forEach(k=>{ const e=document.getElementById(k); if(e) e.value=''; });
     ['gender','blood_type','care_level'].forEach(k=>{ const e=document.getElementById(k); if(e) e.value=''; });
     document.getElementById('statTotal').textContent = (parseInt(document.getElementById('statTotal').textContent)||0)+1;
+    animateNumber('statTotal', parseInt(document.getElementById('statTotal').textContent));
     addHist('add', `录入档案：${name}（${pid}）`);
   }catch(e){ toast(e.message,'error'); }
   finally{ btn.disabled=false; txt.textContent='保存档案'; }
@@ -560,7 +643,7 @@ async function loadPatients(){
     const raw = await r.json();
     const data = Array.isArray(raw) ? raw : (raw.records || []);
     allPts = data;
-    document.getElementById('statTotal').textContent = data.length;
+    animateNumber('statTotal', data.length);
     if(list) renderRecs(data);
     populateSel();
     populateArchiveSel();
@@ -778,7 +861,7 @@ async function submitDecision(){
     await streamDecision(pid, symptom);
     const elapsed = ((Date.now()-t0)/1000).toFixed(1) + 's';
     document.getElementById('statTime').textContent = elapsed;
-    decCount++; document.getElementById('statDec').textContent = decCount;
+    decCount++; animateNumber('statDec', decCount);
     addHist('decision', `AI 建议：${allPts.find(p=>p.patient_id===pid)?.name||pid} — ${symptom.slice(0,20)}`);
     await refreshMemory(pid);
     if(window.ZhPet) window.ZhPet.react('success', `建议已生成，用时 ${elapsed}`);
@@ -901,14 +984,20 @@ window.addEventListener('load', () => {
       cursorChar: '▌'
     });
   }
-  // GSAP：hero 动作按钮微动
-  if(window.gsap){
+  // GSAP：hero 动作按钮微动（通过 ZhVendors 懒加载，避免重复引入）
+  const runGsapExtras = () => {
+    if(!window.gsap) return;
     gsap.from('.hero-actions .btn', {
       y: 12, opacity: 0, duration: 0.6, stagger: 0.08, ease: 'power2.out', delay: 0.3
     });
     gsap.from('.feature-card', {
       y: 24, opacity: 0, duration: 0.7, stagger: 0.1, ease: 'power3.out', delay: 0.4
     });
+  };
+  if(window.gsap){
+    runGsapExtras();
+  }else if(window.ZhVendors){
+    window.ZhVendors.load('gsap').then(ok => { if(ok) runGsapExtras(); }).catch(()=>{});
   }
 });
 
