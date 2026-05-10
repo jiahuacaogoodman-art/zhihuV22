@@ -150,8 +150,9 @@
 .content-col{ flex: 1; min-width: 0; }
 
 /* Hero */
-/* padding 上 sp-4 / 下 sp-1：进一步收紧 hero 的 padding，让每个 tab 的搜索工具条更靠近 hero 介绍。 */
-.hero{ padding: var(--sp-4) var(--sp-5) var(--sp-1); }
+/* padding 上 sp-4 / 下 0：介绍区和下方录入卡之间不再留外部空气，
+   让卡片顶边直接接住三张能力卡底部，配合 .main 的 padding-top: 0 使用。 */
+.hero{ padding: var(--sp-4) var(--sp-5) 0; }
 /* align-items 默认为 stretch → 右侧玻璃卡的高度会自动撑到与左列一致，
    这样卡的底边就能紧贴下面的能力展示三栏，不再出现"右侧卡偏上、下方留空"的间隙感。 */
 .hero-inner{ max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: 1.2fr 1fr; gap: var(--sp-7); align-items: stretch; }
@@ -195,8 +196,9 @@
 .hero-lead{ display: flex; flex-direction: column; gap: 4px; padding: var(--sp-3); border-left: 3px solid var(--accent); background: rgba(14,165,164,0.06); border-radius: 0 var(--r-s) var(--r-s) 0; margin-top: auto; }
 
 /* Main */
-/* padding-top 改成 sp-1，配合上面 .hero 的 padding-bottom: sp-1，让录入卡和 hero 之间只剩最小间距，搜索工具条更贴近介绍。 */
-.main{ flex: 1; padding: var(--sp-1) var(--sp-5) var(--sp-8); }
+/* padding-top 压到 0：hero 底部 padding 也为 0，让录入卡顶边直接贴到上方能力卡底边下面，
+   介绍区与输入框之间仅依赖 hero 内部结构的自然留白分隔。 */
+.main{ flex: 1; padding: 0 var(--sp-5) var(--sp-8); }
 .card{ padding: var(--sp-4) var(--sp-5); }
 .card-head{ display: flex; align-items: center; gap: var(--sp-3); margin-bottom: var(--sp-3); }
 .card-head-icon{ width: 40px; height: 40px; border-radius: var(--r-s); display: inline-flex; align-items: center; justify-content: center; background: rgba(14,165,164,0.12); color: var(--accent-ink); }
@@ -340,8 +342,8 @@
 }
 @media (max-width: 640px){
   .sidebar{ padding: 8px var(--sp-3); gap: var(--sp-2); }
-  .hero{ padding: var(--sp-4) var(--sp-3) var(--sp-1); }
-  .main{ padding: var(--sp-1) var(--sp-3) var(--sp-8); }
+  .hero{ padding: var(--sp-4) var(--sp-3) 0; }
+  .main{ padding: 0 var(--sp-3) var(--sp-8); }
   .card{ padding: var(--sp-4); }
 }
 /* ≤480px 手机窄屏进一步收紧：标题、按钮、stat 数字、hero 面板一起瘦身，
