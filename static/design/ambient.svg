@@ -1,37 +1,35 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice">
   <defs>
-    <!-- 右上：薄荷青 -->
     <radialGradient id="mint" cx="88%" cy="6%" r="55%">
       <stop offset="0%"  stop-color="#5EEAD4" stop-opacity="0.55"/>
       <stop offset="40%" stop-color="#5EEAD4" stop-opacity="0.18"/>
       <stop offset="80%" stop-color="#5EEAD4" stop-opacity="0"/>
     </radialGradient>
-    <!-- 左上：淡紫 -->
     <radialGradient id="lilac" cx="6%" cy="12%" r="50%">
       <stop offset="0%"  stop-color="#C4B5FD" stop-opacity="0.45"/>
       <stop offset="60%" stop-color="#C4B5FD" stop-opacity="0"/>
     </radialGradient>
-    <!-- 左下：天青 -->
     <radialGradient id="sky" cx="12%" cy="94%" r="55%">
       <stop offset="0%"  stop-color="#7DD3FC" stop-opacity="0.42"/>
       <stop offset="70%" stop-color="#7DD3FC" stop-opacity="0"/>
     </radialGradient>
-    <!-- 右下：蜜桃 -->
     <radialGradient id="peach" cx="92%" cy="88%" r="48%">
       <stop offset="0%"  stop-color="#FED7AA" stop-opacity="0.42"/>
       <stop offset="70%" stop-color="#FED7AA" stop-opacity="0"/>
     </radialGradient>
-    <!-- 中央高光：让中间略微发光 -->
     <radialGradient id="glow" cx="50%" cy="45%" r="58%">
       <stop offset="0%"  stop-color="#FFFFFF" stop-opacity="0.40"/>
       <stop offset="50%" stop-color="#FFFFFF" stop-opacity="0.10"/>
       <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
     </radialGradient>
-    <!-- 细网格（极淡，给玻璃折射用） -->
-    <pattern id="grid" width="72" height="72" patternUnits="userSpaceOnUse">
-      <path d="M 72 0 L 0 0 0 72" fill="none" stroke="rgba(15,23,42,0.03)" stroke-width="1"/>
+    <!-- Hero Patterns 风格的点阵（极淡，给玻璃折射用）
+         原型来源： https://heropatterns.com (CC BY 4.0) -->
+    <pattern id="dots" width="28" height="28" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1.2" fill="rgba(15,23,42,0.04)"/>
     </pattern>
-    <!-- 柔和基底渐变 -->
+    <pattern id="circles" width="100" height="100" patternUnits="userSpaceOnUse">
+      <circle cx="50" cy="50" r="40" fill="none" stroke="rgba(20,184,166,0.03)" stroke-width="1"/>
+    </pattern>
     <linearGradient id="base" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0%"  stop-color="#F0FBFB"/>
       <stop offset="55%" stop-color="#F5F9FF"/>
@@ -39,7 +37,8 @@
     </linearGradient>
   </defs>
   <rect width="1600" height="900" fill="url(#base)"/>
-  <rect width="1600" height="900" fill="url(#grid)"/>
+  <rect width="1600" height="900" fill="url(#dots)"/>
+  <rect width="1600" height="900" fill="url(#circles)"/>
   <rect width="1600" height="900" fill="url(#lilac)"/>
   <rect width="1600" height="900" fill="url(#mint)"/>
   <rect width="1600" height="900" fill="url(#sky)"/>
