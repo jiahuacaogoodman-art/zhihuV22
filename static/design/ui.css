@@ -73,6 +73,14 @@ html, body { height: 100%; overflow-x: hidden; }
 .btn:focus-visible{ outline: 2px solid var(--accent); outline-offset: 3px; }
 .btn:disabled{ opacity: 0.5; cursor: not-allowed; }
 .btn:active:not(:disabled){ transform: translateY(1px); }
+/* 修复：a.btn 会继承浏览器默认的 text-decoration: underline。
+   管理端侧栏"进入护工端"、护工端顶栏"管理端"这类按钮化链接都会在文字下出现横线。
+   在基类和所有交互态显式清掉，避免日后新加的 <a class="btn"> 又踩同一个坑。 */
+a.btn,
+a.btn:hover,
+a.btn:focus,
+a.btn:visited,
+a.btn:active{ text-decoration: none; }
 
 /* 主按钮：渐变 + 顶部光泽 */
 .btn-primary{
