@@ -221,6 +221,38 @@
   .pwa-banner .body-s{ flex: 1; min-width: 0; }
 }
 
+/* ============================================================
+   小屏卡片内部间距（≤960）
+   手机端 .card-head 底部 margin 和 .section-label 上下 margin 会叠加，
+   导致"介绍段 → 第一个 section 标签"之间动辄 50~60px。
+   桌面端 PR #15 已做过一版收紧；这里对 ≤960 再单独做一版，让：
+     · .card-head 底距只占 sp-2（8px）
+     · .section-label 上距 sp-2 / 下距 sp-1（4px）
+     · 紧跟在 .card-head 之后的首个 .section-label 上距归零，
+       避免"描述段底距 + 标签上距"双重累加
+   这段和 ≤480 里的老规则放在一起——≤480 的规则只负责再收一级字号和
+   upload/record 布局，不再复写 section-label 的 margin。
+   ============================================================ */
+@media (max-width: 960px){
+  .card{ padding: var(--sp-4); }
+  .card-head{
+    gap: var(--sp-2);
+    margin-bottom: var(--sp-2);      /* 桌面 sp-5 → 手机 sp-2 */
+  }
+  .card-head-text h2{ font-size: 17px; }
+  .card-head-text p{ font-size: 12px; line-height: 1.5; margin-top: 0; }
+  .section-label{
+    margin: var(--sp-2) 0 var(--sp-1);  /* 桌面 sp-5/sp-3 → 手机 sp-2/sp-1 */
+  }
+  /* 关键：紧跟 card-head 的首个 section 标签，直接贴到描述段下方 */
+  .card-head + .section-label{ margin-top: 0; }
+  /* .card-head.with-tools 手机端是"图标+标题 / 工具条"两行布局，
+     下面的 form-grid 是第一批输入框，继续把它的上边距收到最小 */
+  .card-head.with-tools{ margin-bottom: var(--sp-2) !important; }
+  .card-head.with-tools + .form-grid,
+  .card-head.with-tools + .upload-drop{ margin-top: 0 !important; }
+}
+
 /* ≤ 480 进一步收紧 */
 @media (max-width: 480px){
   .stat-grid{ grid-template-columns: repeat(3, 1fr); gap: 6px; }
@@ -231,11 +263,9 @@
   .feature-icon{ width: 40px; height: 40px; font-size: 18px; border-radius: 12px; }
   .feature-title{ font-size: 16px; }
   .feature-desc{ font-size: 13px; line-height: 1.6; }
-  .card-head{ gap: var(--sp-2); margin-bottom: var(--sp-3); }
   .card-head-icon{ width: 32px; height: 32px; }
-  .card-head-text h2{ font-size: 17px; }
-  .card-head-text p{ font-size: 12px; }
-  .section-label{ margin: var(--sp-4) 0 var(--sp-2); }
+  /* ≤480 只负责再收字号；间距交给上面 ≤960 的规则，不再重写 margin，
+     免得又把距离反撑回去。 */
 
   /* 收紧 upload 区和 record 卡片 */
   .upload-drop{ padding: var(--sp-4) var(--sp-3); }
