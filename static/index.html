@@ -21,6 +21,7 @@
 <link rel="stylesheet" href="/static/design/glass.css">
 <link rel="stylesheet" href="/static/design/ui.css">
 <link rel="stylesheet" href="/static/pet/pet.css">
+<link rel="stylesheet" href="/static/design/mobile.css">
 
 <script defer src="/static/design/icons.js"></script>
 <script defer src="/static/design/dialog.js"></script>
@@ -149,8 +150,8 @@
 .content-col{ flex: 1; min-width: 0; }
 
 /* Hero */
-/* padding 上 sp-4 / 下 sp-2：收紧 hero 和下面 main 的 padding，让"录入档案"卡紧贴顶部介绍。 */
-.hero{ padding: var(--sp-4) var(--sp-5) var(--sp-2); }
+/* padding 上 sp-4 / 下 sp-1：进一步收紧 hero 的 padding，让每个 tab 的搜索工具条更靠近 hero 介绍。 */
+.hero{ padding: var(--sp-4) var(--sp-5) var(--sp-1); }
 /* align-items 默认为 stretch → 右侧玻璃卡的高度会自动撑到与左列一致，
    这样卡的底边就能紧贴下面的能力展示三栏，不再出现"右侧卡偏上、下方留空"的间隙感。 */
 .hero-inner{ max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: 1.2fr 1fr; gap: var(--sp-7); align-items: stretch; }
@@ -194,9 +195,9 @@
 .hero-lead{ display: flex; flex-direction: column; gap: 4px; padding: var(--sp-3); border-left: 3px solid var(--accent); background: rgba(14,165,164,0.06); border-radius: 0 var(--r-s) var(--r-s) 0; margin-top: auto; }
 
 /* Main */
-/* padding-top 改成 sp-2，配合上面 .hero 的 padding-bottom: sp-2，让录入卡和 hero 之间只剩 16px。 */
-.main{ flex: 1; padding: var(--sp-2) var(--sp-5) var(--sp-8); }
-.card{ padding: var(--sp-5) var(--sp-6); }
+/* padding-top 改成 sp-1，配合上面 .hero 的 padding-bottom: sp-1，让录入卡和 hero 之间只剩最小间距，搜索工具条更贴近介绍。 */
+.main{ flex: 1; padding: var(--sp-1) var(--sp-5) var(--sp-8); }
+.card{ padding: var(--sp-4) var(--sp-5); }
 .card-head{ display: flex; align-items: center; gap: var(--sp-3); margin-bottom: var(--sp-5); }
 .card-head-icon{ width: 40px; height: 40px; border-radius: var(--r-s); display: inline-flex; align-items: center; justify-content: center; background: rgba(14,165,164,0.12); color: var(--accent-ink); }
 .card-head-text h2{ font: 600 var(--fz-xl)/1.2 var(--font-ui); color: var(--ink-1); letter-spacing: -0.01em; }
@@ -225,8 +226,8 @@
 /* 操作栏：粘底，常驻可见 */
 .form-footer{
   position: sticky; bottom: 0;
-  margin: var(--sp-5) calc(var(--sp-6) * -1) calc(var(--sp-5) * -1);
-  padding: var(--sp-4) var(--sp-6);
+  margin: var(--sp-5) calc(var(--sp-5) * -1) calc(var(--sp-4) * -1);
+  padding: var(--sp-4) var(--sp-5);
   background: linear-gradient(180deg, rgba(255,255,255,0.0) 0%, rgba(255,255,255,0.85) 40%, rgba(255,255,255,0.95) 100%);
   backdrop-filter: blur(12px);
   display: flex; justify-content: flex-end; gap: var(--sp-2);
@@ -337,8 +338,8 @@
 }
 @media (max-width: 640px){
   .sidebar{ padding: 8px var(--sp-3); gap: var(--sp-2); }
-  .hero{ padding: var(--sp-4) var(--sp-3) var(--sp-2); }
-  .main{ padding: var(--sp-2) var(--sp-3) var(--sp-8); }
+  .hero{ padding: var(--sp-4) var(--sp-3) var(--sp-1); }
+  .main{ padding: var(--sp-1) var(--sp-3) var(--sp-8); }
   .card{ padding: var(--sp-4); }
 }
 /* ≤480px 手机窄屏进一步收紧：标题、按钮、stat 数字、hero 面板一起瘦身，
@@ -365,6 +366,58 @@
 /* ── 强化 hero：Typed 光标 + 装饰芯片 ─────────── */
 .typed-cursor{ color: var(--accent); font-weight: 400; }
 .hero-title .typed-out{ color: var(--accent); font-style: normal; background: linear-gradient(135deg,#14B8A6,#818CF8); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+/* ── 统一筛选条：每个 tab 的 card-head 右侧 ───────
+   把每个分类的"搜索 / 选择老人"都摆在 card 首行右边，
+   视觉上对齐 + 大小一致 + 紧贴 hero。 */
+.card-head.with-tools{
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--sp-3);
+  /* 收紧到卡片顶部：让工具条视觉上紧贴 hero */
+  margin-bottom: var(--sp-4);
+}
+.card-head .tools{
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(150px, 220px);
+  gap: 8px;
+  justify-content: end;
+  align-items: center;
+}
+.card-head .tools .field{
+  height: 40px;
+  padding: 0 12px;
+  font-size: var(--fz-sm);
+  background: rgba(255,255,255,0.88);
+}
+.card-head .tools .tools-search{ position: relative; }
+.card-head .tools .tools-search .field{ padding-left: 34px; }
+.card-head .tools .tools-search .icon-s{
+  position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
+  color: var(--ink-4); pointer-events: none;
+}
+@media (max-width: 960px){
+  .card-head.with-tools{
+    grid-template-columns: auto 1fr;
+    grid-template-areas: "icon text" "tools tools";
+    row-gap: var(--sp-3);
+  }
+  .card-head.with-tools .card-head-icon{ grid-area: icon; }
+  .card-head.with-tools .card-head-text{ grid-area: text; }
+  .card-head.with-tools .tools{
+    grid-area: tools;
+    width: 100%;
+    grid-auto-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 520px){
+  .card-head.with-tools .tools{
+    grid-auto-flow: row;
+    grid-auto-columns: minmax(0, 1fr);
+  }
+}
 
 /* ── Feature grid：三张能力卡 ───────────────── */
 .feature-grid{
@@ -416,10 +469,26 @@
 <div class="orb orb-2" style="position:fixed;bottom:-60px;left:-80px"></div>
 <div class="orb orb-3" style="position:fixed;top:45%;left:40%"></div>
 
+<!-- 手机端顶部 appbar：仅在 ≤960 显示（由 mobile.css 控制） -->
+<header class="mobile-appbar" id="mobileAppbar">
+  <button class="ma-btn" id="mobileMenuBtn" aria-label="打开菜单" aria-controls="mobileSidebar">
+    <i class="fa-solid fa-bars"></i>
+  </button>
+  <div class="ma-title">
+    <span class="mark"><i class="fa-solid fa-heart"></i></span>
+    <span>智护银伴</span>
+    <span class="ma-sub">管理端</span>
+  </div>
+  <a class="ma-btn" href="/nurse" aria-label="进入护工端"><i class="fa-solid fa-stethoscope"></i></a>
+</header>
+
+<!-- 抽屉遮罩 -->
+<div class="mobile-scrim" id="mobileScrim" aria-hidden="true"></div>
+
 <div class="app-shell">
 
 <!-- ═════════ SIDEBAR ═════════ -->
-<aside class="sidebar glass-l1">
+<aside class="sidebar glass-l1" id="mobileSidebar">
   <a class="sidebar-brand" href="/">
     <span class="mark"><span class="icon-s" data-icon="heart"></span></span>
     <span class="brand-text">
@@ -577,27 +646,42 @@
 
   <!-- 档案列表 -->
   <section id="tab-list" class="glass card" style="display:none;">
-    <div class="card-head">
+    <div class="card-head with-tools">
       <div class="card-head-icon"><span class="icon" data-icon="users"></span></div>
-      <div class="card-head-text"><h2>档案管理</h2><p>查看、编辑、删除老人档案</p></div>
-    </div>
-    <div style="position:relative; margin-bottom: var(--sp-4);">
-      <span class="icon-s" data-icon="search" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--ink-4);pointer-events:none"></span>
-      <input id="searchInput" class="field" placeholder="搜索姓名、编号、床位…" style="padding-left:36px" oninput="filterRecords(this.value)">
+      <div class="card-head-text"><h2>档案管理</h2><p>支持按姓名、编号、床位、护理级别、过敏、病史、联系人等任意字段搜索</p></div>
+      <div class="tools">
+        <div class="tools-search">
+          <span class="icon-s" data-icon="search"></span>
+          <input id="searchInput" class="field" placeholder="搜索姓名 / 编号 / 床位 / 病史…" oninput="filterRecords(this.value)">
+        </div>
+        <select id="careFilter" class="field" onchange="filterRecords(document.getElementById('searchInput').value)">
+          <option value="">全部护理级别</option>
+          <option>特级</option>
+          <option>一级</option>
+          <option>二级</option>
+          <option>三级</option>
+        </select>
+      </div>
     </div>
     <div id="recordList"><div class="empty"><span class="empty-icon" data-icon="users"></span><div class="empty-title">暂无档案</div><div class="empty-sub">请先录入老人档案</div></div></div>
   </section>
 
   <!-- 病历上传 -->
   <section id="tab-archive" class="glass card" style="display:none;">
-    <div class="card-head">
+    <div class="card-head with-tools">
       <div class="card-head-icon"><span class="icon" data-icon="upload"></span></div>
       <div class="card-head-text"><h2>病历上传</h2><p>上传门诊、住院等病历照片，系统会自动识别文字并归入该老人档案</p></div>
+      <div class="tools">
+        <div class="tools-search">
+          <span class="icon-s" data-icon="search"></span>
+          <input id="archiveSearch" class="field" placeholder="搜索已上传病历文字…" oninput="filterArchiveRecords(this.value)">
+        </div>
+        <select id="archivePatient" class="field" onchange="syncArchivePatient()">
+          <option value="">— 请选择已建档老人 —</option>
+        </select>
+      </div>
     </div>
-    <div class="form-grid cols-1">
-      <label class="field-group"><span class="field-label">选择老人</span><select id="archivePatient" class="field" onchange="syncArchivePatient()"><option value="">— 请选择已建档老人 —</option></select></label>
-    </div>
-    <div class="form-grid cols-3" style="margin-top:var(--sp-4);">
+    <div class="form-grid cols-3" style="margin-top:var(--sp-2);">
       <label class="field-group"><span class="field-label">编号<span class="req">*</span></span><input id="archive_patient_id" class="field" placeholder="P001"></label>
       <label class="field-group"><span class="field-label">姓名</span><input id="archive_name" class="field" placeholder="自动带入"></label>
       <label class="field-group"><span class="field-label">病历类型</span><select id="record_type" class="field"><option>门诊病历</option><option>住院记录</option><option>出院小结</option><option>检查报告</option><option>检验报告</option><option>用药清单</option><option>其他病历</option></select></label>
@@ -621,16 +705,19 @@
 
   <!-- AI 护理建议 -->
   <section id="tab-dec" class="glass card" style="display:none;">
-    <div class="card-head">
+    <div class="card-head with-tools">
       <div class="card-head-icon"><span class="icon" data-icon="sparkles"></span></div>
       <div class="card-head-text"><h2>AI 护理建议</h2><p>AI 会结合这位老人的档案、病历和过往护理记录给出建议，并标注每条建议来自哪一份材料</p></div>
+      <div class="tools">
+        <div class="tools-search">
+          <span class="icon-s" data-icon="search"></span>
+          <input id="decisionSearch" class="field" placeholder="快速搜老人…" oninput="filterDecisionSel(this.value)">
+        </div>
+        <select id="decisionPatient" class="field"><option value="">— 请选择 —</option></select>
+      </div>
     </div>
     <div class="decision-grid">
       <div class="decision-main">
-        <label class="field-group">
-          <span class="field-label">选择老人</span>
-          <select id="decisionPatient" class="field"><option value="">— 请选择 —</option></select>
-        </label>
         <div class="quick-chips">
           <button class="tap-chip" onclick="addSymptom('发热')"><span class="icon-s" data-icon="thermometer"></span>发热</button>
           <button class="tap-chip" onclick="addSymptom('咳嗽')">咳嗽</button>
@@ -660,9 +747,22 @@
 
   <!-- 操作记录 -->
   <section id="tab-hist" class="glass card" style="display:none;">
-    <div class="card-head">
+    <div class="card-head with-tools">
       <div class="card-head-icon"><span class="icon" data-icon="history"></span></div>
       <div class="card-head-text"><h2>操作记录</h2><p>最近 50 条本机操作</p></div>
+      <div class="tools">
+        <div class="tools-search">
+          <span class="icon-s" data-icon="search"></span>
+          <input id="histSearch" class="field" placeholder="搜索记录内容…" oninput="renderHist()">
+        </div>
+        <select id="histTypeFilter" class="field" onchange="renderHist()">
+          <option value="">全部类型</option>
+          <option value="add">新增</option>
+          <option value="edit">编辑</option>
+          <option value="delete">删除</option>
+          <option value="decision">AI 建议</option>
+        </select>
+      </div>
     </div>
     <div style="display:flex; justify-content:flex-end; margin-bottom: var(--sp-3);">
       <button class="btn btn-ghost btn-sm" onclick="clearHistory()"><span class="icon-s" data-icon="trash"></span>清空</button>
@@ -731,6 +831,46 @@ document.addEventListener('DOMContentLoaded', ()=>{
   document.querySelectorAll('.nav-tab').forEach(b=>{
     b.addEventListener('click', ()=>switchTab(b.dataset.tab));
   });
+
+  /* ── 手机抽屉侧栏 ── */
+  const mq = window.matchMedia('(max-width: 960px)');
+  const sidebar = document.getElementById('mobileSidebar');
+  const scrim   = document.getElementById('mobileScrim');
+  const menuBtn = document.getElementById('mobileMenuBtn');
+  const openDrawer = () => {
+    if(!mq.matches) return;
+    sidebar.classList.add('open');
+    scrim.classList.add('show');
+    document.body.style.overflow = 'hidden';
+    menuBtn?.setAttribute('aria-expanded','true');
+  };
+  const closeDrawer = () => {
+    sidebar.classList.remove('open');
+    scrim.classList.remove('show');
+    document.body.style.overflow = '';
+    menuBtn?.setAttribute('aria-expanded','false');
+  };
+  menuBtn?.addEventListener('click', e => { e.stopPropagation(); sidebar.classList.contains('open') ? closeDrawer() : openDrawer(); });
+  scrim?.addEventListener('click', closeDrawer);
+  // 点任一导航 / 底部按钮后自动关闭抽屉
+  sidebar?.querySelectorAll('.nav-tab, .sidebar-footer .btn').forEach(el => {
+    el.addEventListener('click', () => { if(mq.matches) closeDrawer(); });
+  });
+  // Esc 关闭
+  document.addEventListener('keydown', e => { if(e.key === 'Escape' && sidebar.classList.contains('open')) closeDrawer(); });
+  // 从小屏切回大屏时复位
+  mq.addEventListener?.('change', e => { if(!e.matches) closeDrawer(); });
+  // 简单的边缘左滑关闭手势
+  let touchStart = null;
+  sidebar?.addEventListener('touchstart', e => { if(e.touches.length===1) touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY }; }, { passive: true });
+  sidebar?.addEventListener('touchmove', e => {
+    if(!touchStart || e.touches.length!==1) return;
+    const dx = e.touches[0].clientX - touchStart.x;
+    const dy = e.touches[0].clientY - touchStart.y;
+    if(dx < -60 && Math.abs(dy) < 40){ closeDrawer(); touchStart = null; }
+  }, { passive: true });
+  sidebar?.addEventListener('touchend', () => { touchStart = null; });
+
   const ep = document.getElementById('evidencePanel');
   if(ep && window.EvidencePanel){
     currentEvidencePanel = new EvidencePanel(ep, { scope: 'admin-decision' });
@@ -864,9 +1004,22 @@ function renderRecs(list){
   if(window.ZhIcons) window.ZhIcons.mount(el);
 }
 function filterRecords(q){
-  if(!q){ renderRecs(allPts); return; }
-  const kw = q.toLowerCase();
-  renderRecs(allPts.filter(p=>(p.name||'').toLowerCase().includes(kw) || (p.patient_id||'').toLowerCase().includes(kw) || (p.bed_number||'').toLowerCase().includes(kw)));
+  const kw = (q||'').trim().toLowerCase();
+  const level = (document.getElementById('careFilter')?.value || '').trim();
+  const match = (p) => {
+    if(level && (p.care_level||'') !== level) return false;
+    if(!kw) return true;
+    // 聚合多字段做子串搜索
+    const bag = [
+      p.patient_id, p.name, p.age, p.gender, p.bed_number, p.care_level,
+      p.primary_nurse, p.blood_type, p.allergy, p.diet_restriction,
+      p.medical_history, p.notes,
+      p.emergency_contact, p.emergency_phone, p.emergency_relation,
+      p.birth_date, p.admission_date, p.id_card
+    ].map(v => String(v==null?'':v).toLowerCase()).join(' | ');
+    return bag.includes(kw);
+  };
+  renderRecs(allPts.filter(match));
 }
 async function delPt(pid, name){
   const ok = await window.ZhDialog.confirm({ title:`删除 ${name}？`, text:'此操作不可撤销，该老人的全部档案、病历照片、识别文字和护理记录都会被删除。', confirmText:'确认删除', danger: true });
@@ -973,12 +1126,23 @@ async function loadMedicalRecords(pid){
   }
 }
 function renderMedicalRecords(records, pid){
+  // 缓存本次数据以便工具条搜索可以就地过滤
+  window._archiveCache = { pid, records };
   const box = document.getElementById('recordArchiveList');
-  if(!records.length){
-    box.innerHTML = '<div class="empty"><span class="empty-icon" data-icon="file"></span><div class="empty-title">该老人暂无病历照片</div></div>';
+  const kw = (document.getElementById('archiveSearch')?.value || '').trim().toLowerCase();
+  let list = records;
+  if(kw){
+    list = records.filter(r => {
+      const bag = [r.ocr_text, r.manual_text, r.record_type, r.notes, r.uploaded_at, r.ocr_engine]
+        .map(v => String(v==null?'':v).toLowerCase()).join(' | ');
+      return bag.includes(kw);
+    });
+  }
+  if(!list.length){
+    box.innerHTML = `<div class="empty"><span class="empty-icon" data-icon="file"></span><div class="empty-title">${kw?'没有匹配该关键词的病历':'该老人暂无病历照片'}</div></div>`;
     if(window.ZhIcons) window.ZhIcons.mount(box); return;
   }
-  box.innerHTML = '<div class="record-grid">' + records.map(r=>{
+  box.innerHTML = '<div class="record-grid">' + list.map(r=>{
     const ok = r.ocr_status === 'ocr_success';
     const txt = (r.ocr_text || r.manual_text || '未识别到文字。').slice(0,360);
     return `<div class="record-card">
@@ -997,6 +1161,11 @@ function renderMedicalRecords(records, pid){
   }).join('') + '</div>';
   if(window.ZhIcons) window.ZhIcons.mount(box);
 }
+function filterArchiveRecords(){
+  const cache = window._archiveCache;
+  if(!cache) return;
+  renderMedicalRecords(cache.records, cache.pid);
+}
 async function deleteMedicalRecord(docId, pid){
   const ok = await window.ZhDialog.confirm({ title:'删除这份病历？', text:'原图、识别文字和 AI 记忆都会一并删除', confirmText:'确认删除', danger: true });
   if(!ok) return;
@@ -1010,14 +1179,24 @@ async function deleteMedicalRecord(docId, pid){
 }
 
 /* ═══════════ AI 护理建议 ═══════════ */
-function populateSel(){
+function populateSel(filter){
   const s = document.getElementById('decisionPatient');
-  s.innerHTML = '<option value="">— 请选择 —</option>' + allPts.map(p=>`<option value="${esc(p.patient_id)}">${esc(p.name)}（${esc(p.patient_id)}）</option>`).join('');
+  if(!s) return;
+  const kw = (filter==null ? (document.getElementById('decisionSearch')?.value||'') : filter).trim().toLowerCase();
+  const cur = s.value;
+  const list = kw ? allPts.filter(p => {
+    const bag = [p.patient_id, p.name, p.bed_number, p.care_level, p.primary_nurse, p.allergy, p.medical_history]
+      .map(v => String(v==null?'':v).toLowerCase()).join(' | ');
+    return bag.includes(kw);
+  }) : allPts;
+  s.innerHTML = '<option value="">— 请选择 —</option>' + list.map(p=>`<option value="${esc(p.patient_id)}">${esc(p.name)}（${esc(p.patient_id)}）${p.bed_number?' · '+esc(p.bed_number):''}</option>`).join('');
+  if(list.find(p => p.patient_id === cur)) s.value = cur;
   s.onchange = () => {
     if(s.value) refreshMemory(s.value);
     else if(currentEvidencePanel) currentEvidencePanel.render([], []);
   };
 }
+function filterDecisionSel(q){ populateSel(q); }
 function addSymptom(s){
   const ta = document.getElementById('symptomInput');
   ta.value = (ta.value ? ta.value+'\n' : '') + s;
@@ -1128,8 +1307,16 @@ function addHist(type, text){
 }
 function renderHist(){
   const el = document.getElementById('historyList');
-  if(!histLog.length){ el.innerHTML = '<div class="empty"><span class="empty-icon" data-icon="history"></span><div class="empty-title">暂无操作记录</div></div>'; if(window.ZhIcons) window.ZhIcons.mount(el); return; }
-  el.innerHTML = histLog.map(h=>`
+  const kw = (document.getElementById('histSearch')?.value || '').trim().toLowerCase();
+  const type = (document.getElementById('histTypeFilter')?.value || '').trim();
+  let list = histLog;
+  if(type) list = list.filter(h => h.type === type);
+  if(kw) list = list.filter(h => (h.text||'').toLowerCase().includes(kw) || (h.time||'').toLowerCase().includes(kw));
+  if(!list.length){
+    el.innerHTML = `<div class="empty"><span class="empty-icon" data-icon="history"></span><div class="empty-title">${histLog.length?'没有匹配的记录':'暂无操作记录'}</div></div>`;
+    if(window.ZhIcons) window.ZhIcons.mount(el); return;
+  }
+  el.innerHTML = list.map(h=>`
     <div class="hist-row">
       <span class="hist-dot"></span>
       <span class="body-s"><span class="icon-s" data-icon="${histIcon[h.type]||'info'}" style="vertical-align:-3px;color:var(--accent)"></span> ${esc(h.text)}</span>

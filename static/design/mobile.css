@@ -1,0 +1,396 @@
+/* === 智护银伴 · 手机端适配 ==================================================
+   在 tokens.css / ui.css / glass.css / 页面内 <style> 之后加载。
+   目标：
+     · 适配 iOS 安全区域（刘海、Home 指示条）
+     · iOS 输入不触发页面缩放（字号 ≥ 16px）
+     · 触控友好：按钮 / tap-chip / nav-tab 最小 44×44
+     · 抽屉式侧栏（管理端）：左滑打开 / 右滑关闭 / 点击遮罩关闭
+     · 护工端底部 tab 增加底部 safe-area 填充
+     · 性能降级：低端手机关闭 conic rim 动画 + 降低 blur
+     · 禁用 iOS 长按系统菜单与点击高亮
+   ========================================================================== */
+
+/* ---------- iOS 安全区域 ---------- */
+:root{
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sat: env(safe-area-inset-top, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+}
+
+/* ---------- iOS 输入防缩放：字段字号统一 ≥ 16px ---------- */
+@media (max-width: 960px){
+  .field,
+  input.field,
+  textarea.field,
+  select.field,
+  .dialog .field{
+    font-size: 16px;            /* 低于 16 在 iOS Safari 会触发自动放大 */
+    line-height: 1.45;
+  }
+  /* 字段小号版不受影响 */
+}
+
+/* ---------- 触控区：小屏下按钮 / chip / nav-tab 最少 44 ---------- */
+@media (max-width: 640px){
+  .btn{ min-height: 44px; }
+  .btn-sm{ min-height: 38px; }
+  .btn-icon{ width: 44px; height: 44px; min-height: 44px; }
+  .tap-chip{ min-height: 38px; padding: 0 14px; }
+  /* 在手机上取消悬浮 translate，避免 sticky hover 状态 */
+  .btn:hover:not(:disabled),
+  .tap-chip:hover,
+  .feature-card:hover{ transform: none; }
+}
+
+/* ---------- 通用手势 / 视觉 ---------- */
+@media (max-width: 640px){
+  html, body{ -webkit-text-size-adjust: 100%; }
+  body{
+    /* 去掉 iOS 点击高亮（改由 :active / focus-visible 控制） */
+    -webkit-tap-highlight-color: transparent;
+  }
+  /* 图片、视频禁用长按弹菜单（需要时可单独放开） */
+  img{ -webkit-touch-callout: none; }
+  /* 滚动体验 */
+  .sidebar-nav,
+  .pl-body,
+  .panel-detail,
+  .dialog{ -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+}
+
+/* ============================================================
+   管理端（index.html）：小屏改为"顶部 appbar + 抽屉侧栏"
+   ============================================================ */
+
+/* 顶部 appbar（默认隐藏，JS 在小屏注入 .mobile-appbar） */
+.mobile-appbar{
+  display: none;
+  position: sticky;
+  top: 0;
+  z-index: 45;
+  padding: calc(var(--sat) + 8px) var(--sp-3) 8px;
+  align-items: center;
+  gap: var(--sp-2);
+  background: rgba(11,18,32,0.72);
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  border-bottom: 1px solid rgba(255,255,255,0.10);
+}
+.mobile-appbar .ma-btn{
+  flex-shrink: 0;
+  width: 40px; height: 40px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.06);
+  color: #E2E8F0;
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer;
+}
+.mobile-appbar .ma-btn:active{ background: rgba(255,255,255,0.12); }
+.mobile-appbar .ma-title{
+  flex: 1; min-width: 0;
+  font: 600 15px/1.2 var(--font-ui);
+  color: #fff;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  display: flex; align-items: center; gap: 8px;
+}
+.mobile-appbar .ma-title .mark{
+  width: 28px; height: 28px; border-radius: 8px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-ink));
+  display: inline-flex; align-items: center; justify-content: center; color: #fff;
+  flex-shrink: 0;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.30), 0 2px 8px rgba(20,184,166,0.35);
+}
+.mobile-appbar .ma-sub{
+  font: 500 11px/1 var(--font-ui);
+  color: rgba(226,232,240,0.55);
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.06);
+  letter-spacing: 0.08em;
+}
+
+/* 抽屉遮罩 */
+.mobile-scrim{
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  background: rgba(11,18,32,0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  opacity: 0;
+  transition: opacity var(--dur-base) var(--ease);
+}
+.mobile-scrim.show{ opacity: 1; }
+
+/* 抽屉断点：≤ 960 */
+@media (max-width: 960px){
+  .mobile-appbar{ display: flex; }
+  .mobile-scrim{ display: block; pointer-events: none; }
+  .mobile-scrim.show{ pointer-events: auto; }
+
+  /* 让原来的顶栏退出常态 */
+  .app-shell{ flex-direction: column; }
+
+  /* 覆盖 index.html 内联样式的 sidebar */
+  .app-shell > .sidebar{
+    position: fixed !important;
+    top: 0; left: 0; bottom: 0;
+    height: 100dvh !important;
+    width: 280px !important;
+    max-width: 82vw !important;
+    flex: none !important;
+    flex-direction: column !important;
+    padding: calc(var(--sat) + 16px) var(--sp-4) calc(var(--sab) + 16px) !important;
+    gap: var(--sp-3) !important;
+    z-index: 60;
+    background: rgba(11,18,32,0.88);
+    backdrop-filter: blur(22px) saturate(180%);
+    -webkit-backdrop-filter: blur(22px) saturate(180%);
+    border-right: 1px solid rgba(255,255,255,0.10);
+    box-shadow: 12px 0 40px rgba(15,23,42,0.35);
+    transform: translateX(-102%);
+    transition: transform var(--dur-base) var(--ease);
+    overflow-y: auto;
+  }
+  .app-shell > .sidebar.open{ transform: translateX(0); }
+  .app-shell > .sidebar::after{ display: none; }
+
+  /* 抽屉里恢复竖直导航体验 */
+  .app-shell > .sidebar .sidebar-brand{ flex-shrink: 0; }
+  .app-shell > .sidebar .sidebar-brand .brand-text .sub{ display: block; }
+  .app-shell > .sidebar .section-hint{ display: block; }
+  .app-shell > .sidebar .sidebar-nav{
+    flex-direction: column !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    gap: 4px !important;
+    flex: 1 1 auto !important;
+  }
+  .app-shell > .sidebar .nav-tab{
+    height: 46px !important;
+    padding: 0 14px !important;
+    width: 100% !important;
+    font-size: 15px !important;
+    gap: 12px !important;
+  }
+  .app-shell > .sidebar .sidebar-spacer{ display: block !important; flex: 1 1 auto; }
+  .app-shell > .sidebar .sidebar-footer{
+    display: flex !important;
+    flex-direction: column !important;
+    padding-top: var(--sp-3) !important;
+    border-top: 1px solid rgba(255,255,255,0.08);
+  }
+  .app-shell > .sidebar .sidebar-footer .btn{ width: 100% !important; justify-content: center !important; }
+  .app-shell > .sidebar .sidebar-hint{ display: block !important; color: rgba(226,232,240,0.50) !important; }
+
+  /* 内容列抽掉顶栏占位高度由 appbar 本身接管 */
+  .content-col{ width: 100%; }
+
+  /* 统计卡在手机竖着排更舒服（3 列 → 2 列） */
+  .stat-grid{ grid-template-columns: repeat(3, minmax(0,1fr)); gap: var(--sp-2); }
+  .stat{ min-height: 76px; padding: var(--sp-2) 4px; }
+  .stat-num{ font-size: 22px; }
+  .stat-lbl{ font-size: 11px; letter-spacing: 0.02em; }
+
+  /* Hero 标题允许换行，打字机单行塌陷问题也顺带解决 */
+  .hero-title{ white-space: normal !important; font-size: clamp(28px, 7vw, 40px) !important; }
+  .hero-title #typedHero{ display: inline !important; min-height: 0 !important; }
+  .hero-actions{ flex-wrap: wrap; gap: 8px; }
+  .hero-actions .btn{ flex: 1 1 calc(50% - 4px); min-width: 0; }
+
+  /* 录入列表的标签容器允许占满下一行 */
+  .patient-row{ grid-template-columns: 40px 1fr auto !important; }
+  .patient-tags{ grid-column: 1 / -1 !important; justify-content: flex-start !important; max-width: none !important; margin-top: 2px; }
+  .patient-actions{ grid-row: 1; grid-column: 3; }
+
+  /* sticky 表单底部：避开 iOS 底部小白条 */
+  .form-footer{
+    padding-bottom: calc(var(--sp-4) + var(--sab)) !important;
+  }
+
+  /* PWA banner 上移，让出底部 tab/ 宠物空间 */
+  .pwa-banner{
+    bottom: calc(var(--sab) + 88px);
+    max-width: calc(100% - 24px);
+    padding: 10px 14px;
+    font-size: 13px;
+  }
+  .pwa-banner .body-s{ flex: 1; min-width: 0; }
+}
+
+/* ≤ 480 进一步收紧 */
+@media (max-width: 480px){
+  .stat-grid{ grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .stat{ min-height: 66px; padding: 8px 2px; }
+  .stat-num{ font-size: 20px; }
+  .hero-actions .btn{ flex: 1 1 100%; }
+  .feature-card{ padding: var(--sp-4); gap: var(--sp-2); }
+  .feature-icon{ width: 40px; height: 40px; font-size: 18px; border-radius: 12px; }
+  .feature-title{ font-size: 16px; }
+  .feature-desc{ font-size: 13px; line-height: 1.6; }
+  .card-head{ gap: var(--sp-2); margin-bottom: var(--sp-3); }
+  .card-head-icon{ width: 32px; height: 32px; }
+  .card-head-text h2{ font-size: 17px; }
+  .card-head-text p{ font-size: 12px; }
+  .section-label{ margin: var(--sp-4) 0 var(--sp-2); }
+
+  /* 收紧 upload 区和 record 卡片 */
+  .upload-drop{ padding: var(--sp-4) var(--sp-3); }
+  .record-grid{ grid-template-columns: 1fr !important; gap: var(--sp-2); }
+  .record-img{ height: 140px; }
+  .ocr-box{ max-height: 88px; }
+}
+
+/* ============================================================
+   护工端（nurse.html）
+   ============================================================ */
+@media (max-width: 900px){
+  /* 顶部 nav：收紧内边距 + 安全区 */
+  body > .nav{
+    padding: var(--sat) var(--sp-3) 0 !important;
+    height: calc(56px + var(--sat)) !important;
+    gap: var(--sp-2) !important;
+  }
+  body > .nav .nav-brand{ font-size: 15px; gap: 6px; }
+  body > .nav .nav-brand .sub{ font-size: 11px; margin-left: 2px; }
+  body > .nav .nav-title{ font-size: 13px; }
+  body > .nav .btn-sm{ height: 34px; padding: 0 10px; font-size: 12px; }
+
+  /* 底部 tab 已支持；保证安全区填充、触控区 */
+  .bottom-nav{
+    padding-top: 4px !important;
+    padding-bottom: calc(var(--sab) + 6px) !important;
+    height: auto !important;
+    min-height: calc(54px + var(--sab)) !important;
+  }
+  .bn-item{ min-height: 48px; padding-top: 6px; }
+  .bn-item .icon{ width: 22px; height: 22px; }
+  .bn-item > span:nth-child(2){ font-size: 11px; }
+
+  /* 左列老人列表：背景更实以提高可读性 */
+  .panel-list{ background: rgba(255,255,255,0.75) !important; }
+  .pl-body{ padding: var(--sp-2); }
+  .pt-item{ padding: 10px 12px; }
+
+  /* 详情头部：在小屏允许换行 */
+  .patient-head{ flex-wrap: wrap; gap: var(--sp-2); }
+  .patient-head .avatar{ width: 48px !important; height: 48px !important; font-size: 18px !important; }
+  .patient-head h2{ font-size: 20px !important; }
+  .patient-head .meta{ font-size: 12px; }
+
+  /* info-grid 在 ≤ 520 改为 1 列，避免中英混排撑开 */
+  .info-grid{ gap: 6px; }
+
+  /* 任务卡：按钮横排在小屏会被挤，允许 wrap */
+  .task-exec-actions{ gap: 6px !important; }
+  .task-exec-actions .btn{
+    flex: 1 1 calc(33% - 4px);
+    min-width: 0;
+    padding: 0 8px !important;
+  }
+
+  /* action-row：生成任务卡 / 快速问 AI 两个按钮太大会换行 */
+  .action-row{ grid-template-columns: 1fr !important; }
+  .action-row .btn{ height: 44px; font-size: 14px; }
+
+  /* 详情页底部留出 tab 高度 + 安全区 */
+  .panel-detail{
+    padding: var(--sp-3) !important;
+    padding-bottom: calc(80px + var(--sab)) !important;
+  }
+  .detail-grid{ gap: var(--sp-3); }
+
+  /* 依据面板小屏换色避免看不清 */
+  .evidence-panel{ background: rgba(255,255,255,0.75); }
+
+  /* 任务卡 SBAR 两个按钮小屏平铺 */
+  .task-box .btn-sm{ flex: 1; justify-content: center; }
+
+  /* 复测提醒行在窄屏换行 */
+  .recheck-row{ flex-wrap: wrap; gap: 6px; }
+  .recheck-row .btn{ flex: 1 1 auto; }
+}
+
+/* ≤ 520 手机窄屏 */
+@media (max-width: 520px){
+  .info-grid{ grid-template-columns: 1fr !important; }
+  .action-row{ grid-template-columns: 1fr !important; }
+  .task-exec-actions .btn{
+    flex: 1 1 100%;
+  }
+  .task-head{ padding: var(--sp-3) !important; }
+  .task-event-title{ font-size: 16px !important; }
+  .sbar-grid{ font-size: 12px; }
+  .patient-head{ padding: var(--sp-3) !important; }
+  .panel-list{ max-height: none; }
+  .collapse-head{ padding: 12px 14px !important; }
+  .collapse-inner{ padding: 0 14px var(--sp-3) !important; }
+}
+
+/* ============================================================
+   性能降级：低端机 / 节能 / 小屏
+   - conic rim 动画 CPU 代价高，在小屏关掉
+   - 毛玻璃 blur 在 Android Chrome 可能掉帧，小屏减少
+   ============================================================ */
+@media (max-width: 640px){
+  .glass::before{ animation: none !important; opacity: 0.65; }
+  .glass{
+    /* 稍微降 blur，首屏更流畅 */
+    backdrop-filter: blur(18px) saturate(150%);
+    -webkit-backdrop-filter: blur(18px) saturate(150%);
+  }
+  /* 背景动漂移也降到最低幅度 */
+  body::after{ animation-duration: 40s; filter: blur(10px); }
+  .orb{ filter: blur(80px); opacity: 0.35; }
+  .orb-3{ display: none; }
+}
+
+/* 极小屏（老旧设备）彻底关掉毛玻璃装饰，保证流畅 */
+@media (max-width: 380px){
+  .glass::before,
+  .glass::after{ display: none; }
+  body::after{ display: none; }
+  .orb{ display: none; }
+}
+
+/* ---------- 横屏适配：避免 Landscape 下 hero 太高 ---------- */
+@media (max-width: 900px) and (orientation: landscape) and (max-height: 500px){
+  .hero{ padding: var(--sp-3) var(--sp-4) var(--sp-2) !important; }
+  .hero-inner{ gap: var(--sp-3) !important; }
+  .hero-title{ font-size: 26px !important; margin: 4px 0 !important; }
+  .hero-sub{ font-size: 13px !important; line-height: 1.5 !important; }
+  .hero-panel{ padding: var(--sp-3) !important; }
+  .stat-num{ font-size: 20px; }
+  .stat{ min-height: 56px; }
+}
+
+/* ---------- dialog 在小屏底部弹出更好用（可选） ---------- */
+@media (max-width: 560px){
+  .dialog-ov{ align-items: flex-end; padding: 0; }
+  .dialog{
+    max-width: 100% !important;
+    border-radius: 20px 20px 0 0 !important;
+    padding: var(--sp-4) var(--sp-4) calc(var(--sp-4) + var(--sab)) !important;
+    animation: dialog-sheet-in 280ms var(--ease-spring);
+  }
+  @keyframes dialog-sheet-in{
+    from{ opacity: 0; transform: translateY(24px); }
+    to{ opacity: 1; transform: translateY(0); }
+  }
+  .dialog-actions{ gap: 8px; }
+  .dialog-actions .btn{ flex: 1; }
+}
+
+/* ---------- toast 在手机居中顶部，避免被手指挡到 ---------- */
+@media (max-width: 640px){
+  .toast-wrap{
+    top: calc(var(--sat) + 10px);
+    right: 12px;
+    left: 12px;
+    align-items: center;
+  }
+  .toast{ max-width: 100%; width: 100%; }
+}
