@@ -146,17 +146,19 @@
 .content-col{ flex: 1; min-width: 0; }
 
 /* Hero */
-.hero{ padding: var(--sp-7) var(--sp-5) var(--sp-4); }
+.hero{ padding: var(--sp-4) var(--sp-5); }
 .hero-inner{ max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: 1.2fr 1fr; gap: var(--sp-7); align-items: start; }
 .hero-kicker{ display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 12px; border-radius: 999px; background: rgba(14,165,164,0.12); color: var(--accent-ink); font: 600 var(--fz-xs)/1 var(--font-ui); letter-spacing: 0.04em; }
-.hero-title{ margin: var(--sp-3) 0 var(--sp-3); font-size: clamp(36px, 4.8vw, 56px); font-family: var(--font-display); font-weight: 600; line-height: 1.12; color: var(--ink-1); letter-spacing: -0.02em; }
+.hero-title{ margin: var(--sp-3) 0 var(--sp-3); font-size: clamp(36px, 4.8vw, 56px); font-family: var(--font-display); font-weight: 600; line-height: 1.12; color: var(--ink-1); letter-spacing: -0.02em; white-space: nowrap; }
 .hero-title em{ color: var(--accent); font-style: normal; }
-/* 打字机：锁定单行 + 最小高度，避免逐字打出/回删时最后一个字折行或整行高度塌陷引起页面上下跳动 */
-.hero-title #typedHero{ display: inline-block; white-space: nowrap; min-height: 1.2em; }
+/* 打字机：锁定单行 + 最小高度，避免逐字打出/回删时整行高度塌陷引起页面上下跳动。
+   注意 Typed.js 的光标是 #typedHero 的兄弟节点（在 h1 里），单独给 #typedHero 设置 nowrap 拦不住它，
+   所以额外给 .hero-title 设置了 white-space: nowrap；<br> 仍会生效，两行结构保持不变。 */
+.hero-title #typedHero{ display: inline-block; min-height: 1.2em; }
 .hero-sub{ font: 400 17px/1.8 var(--font-ui); color: var(--ink-3); max-width: 52ch; }
 .hero-actions{ margin-top: var(--sp-5); display: flex; gap: var(--sp-2); }
 
-.hero-panel{ padding: var(--sp-5); display: flex; flex-direction: column; gap: var(--sp-4); position: relative; }
+.hero-panel{ padding: var(--sp-4) var(--sp-4); display: flex; flex-direction: column; gap: var(--sp-3); position: relative; }
 .hero-panel-title{ display: flex; align-items: center; gap: 8px; color: var(--ink-3); }
 /* 右上角小 Lottie 动画，作为玻璃卡的视觉点缀 */
 .hero-lottie{
@@ -172,9 +174,17 @@
 .hero-lottie lottie-player{ width: 100%; height: 100%; }
 @media (max-width: 640px){ .hero-lottie{ width: 80px; height: 80px; top: -12px; right: -12px; } }
 .stat-grid{ display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--sp-3); }
-.stat{ padding: var(--sp-3); border-radius: var(--r-m); background: rgba(255,255,255,0.65); border: 1px solid rgba(15,23,42,0.05); }
-.stat-num{ font-family: var(--font-display); font-size: 32px; font-weight: 600; color: var(--ink-1); letter-spacing: -0.02em; line-height: 1; }
-.stat-lbl{ font: 500 var(--fz-xs)/1.4 var(--font-ui); color: var(--ink-4); margin-top: 6px; letter-spacing: 0.03em; }
+.stat{
+  padding: var(--sp-3) var(--sp-2);
+  border-radius: var(--r-m);
+  background: rgba(255,255,255,0.65);
+  border: 1px solid rgba(15,23,42,0.05);
+  min-height: 92px;
+  display: flex; flex-direction: column; justify-content: center; align-items: center;
+  text-align: center;
+}
+.stat-num{ font-family: var(--font-display); font-size: 30px; font-weight: 600; color: var(--ink-1); letter-spacing: -0.02em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.stat-lbl{ font: 500 var(--fz-xs)/1.3 var(--font-ui); color: var(--ink-4); margin-top: 6px; letter-spacing: 0.03em; white-space: nowrap; }
 .hero-lead{ display: flex; flex-direction: column; gap: 4px; padding: var(--sp-3); border-left: 3px solid var(--accent); background: rgba(14,165,164,0.06); border-radius: 0 var(--r-s) var(--r-s) 0; }
 
 /* Main */
@@ -1119,7 +1129,7 @@ window.addEventListener('load', () => {
       backDelay: 2400,
       loop: true,
       smartBackspace: true,
-      cursorChar: '▌'
+      showCursor: false
     });
   }
   // GSAP：hero 动作按钮微动（通过 ZhVendors 懒加载，避免重复引入）
