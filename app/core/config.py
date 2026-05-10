@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 @Time    : 2026/03/08 10:00
-@Author  : Manus AI
+@Author  : jiahuaCao
 @File    : config.py
 @Desc    : 全局配置文件：将所有硬编码的路径、模型名称、URL等集中管理
 """

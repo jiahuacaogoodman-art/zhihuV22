@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 @Time    : 2026/03/08 10:10
-@Author  : Manus AI
+@Author  : jiahuaCao
 @File    : main.py
 @Desc    : "智护银伴" 后端应用主入口
 """
