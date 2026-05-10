@@ -32,7 +32,7 @@
 
   // ---- 小工具 ----
   const $ = (sel, root = document) => root.querySelector(sel);
-  const LS_KEY = 'zh-pet-pos-v1';
+  const LS_KEY = 'zh-pet-pos-v2';
   const LS_HIDE = 'zh-pet-hide-v1';
 
   function supportsWebp() {
@@ -201,13 +201,8 @@
         this.hide(false);
       }
 
-      // 窗口变化时，若未被用户拖过，就重新吸附到槽位
-      window.addEventListener('resize', () => {
-        const hasSavedPos = this._pos && this._pos.x != null && this._pos.y != null;
-        if (hasSavedPos) return;
-        const slot = document.getElementById('sidebarPetSlot');
-        if (slot && window.innerWidth > 960) this._dockToSlot(slot);
-      });
+      // 窗口变化时不再重新吸附到槽位：宠物固定在左下角（CSS 默认位置）
+      // 用户拖动后的位置仍然会通过 _pos 持久化
 
       // 拖拽
       this._bindDrag();
@@ -458,13 +453,8 @@
       try { localStorage.setItem(LS_KEY, JSON.stringify(this._pos)); } catch { }
     }
     _applyPos() {
-      // 如果页面上有预留插槽（左下角 sidebar-pet-slot），且用户没拖过，就吸附到插槽位置
-      const slot = document.getElementById('sidebarPetSlot');
+      // 固定在左下角（由 CSS 控制），只有用户主动拖过之后才用绝对坐标覆盖
       const hasSavedPos = this._pos && this._pos.x != null && this._pos.y != null;
-      if (slot && !hasSavedPos && window.innerWidth > 960) {
-        this._dockToSlot(slot);
-        return;
-      }
       if (hasSavedPos) {
         const h = this.host;
         h.style.left = this._pos.x + 'px';
