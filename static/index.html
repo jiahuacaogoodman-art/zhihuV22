@@ -338,13 +338,16 @@
   /* hero: 手机端把右侧玻璃卡 dock 到右上角变成紧凑挂件
      · 原本它会作为第 2 行出现在 hero 文字下方，用户几乎看不到
      · 现在用 absolute 从流中抽出来固定在右上角，只保留 3 个数字
-     · 左列文字 padding-right 留出挂件空间，避免文字被挡 */
+     · 不给左列整体留右边距了——挂件只占顶部约 120px 高度，
+       只要 hero-kicker + title 的第一行避开它即可，hero-sub 可以全宽；
+       所以用 hero-kicker 的 margin-right 给挂件腾一点空间，
+       title 因为 font-size clamp + word-break 本来也不会被遮挡。 */
   .hero-inner{
     position: relative;
     grid-template-columns: 1fr;
     gap: var(--sp-3);
-    padding-right: 148px; /* 140 panel + 8 gap */
   }
+  .hero-kicker{ margin-right: 148px; /* 只把第一行的"本地离线运行"芯片让开挂件 */ }
   .hero-panel{
     position: absolute;
     top: 0;
@@ -356,11 +359,19 @@
     /* 强制给挂件一个实体背景：原来的 .glass 在浅色页面上会透明看不见。
        用 95% 不透明白 + teal 细描边 + 柔阴影，让它作为"悬浮小卡"被看到。 */
     background: rgba(255,255,255,0.95) !important;
-    border: 1px solid rgba(14,165,164,0.20);
-    box-shadow: 0 6px 18px rgba(15,23,42,0.08), 0 1px 2px rgba(15,23,42,0.04);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
+    border: 1px solid rgba(14,165,164,0.20) !important;
+    box-shadow: 0 6px 18px rgba(15,23,42,0.08), 0 1px 2px rgba(15,23,42,0.04) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    /* 盖掉 AOS 的初始 opacity:0 + transform 位移，否则 AOS 没触发时挂件永远不可见 */
+    opacity: 1 !important;
+    transform: none !important;
+    overflow: visible !important;
   }
+  /* 彻底关闭 .glass 的 conic rim + sheen 伪元素 —— 在小挂件上会用 mix-blend-mode:screen
+     把内容"吃掉"，让数字和背景融为一体 */
+  .hero-panel::before,
+  .hero-panel::after{ display: none !important; }
   /* 不重要的东西在手机端全部隐藏：Lottie 动画、标题、底部说明 */
   .hero-panel .hero-panel-title,
   .hero-panel .hero-lead,
@@ -403,7 +414,7 @@
   .hero-actions .btn{ flex: 1 1 auto; min-width: 0; }
   .hero-panel{ padding: var(--sp-3); }
   /* ≤480px：挂件再瘦身到 120px，避免和超短 hero-title 撞一起 */
-  .hero-inner{ padding-right: 128px; }
+  .hero-kicker{ margin-right: 128px; }
   .hero-panel{ width: 120px; padding: 6px !important; }
   .hero-panel .stat-num{ font-size: 16px; }
   .hero-panel .stat-lbl{ font-size: 10px; }
