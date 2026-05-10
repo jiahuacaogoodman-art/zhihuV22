@@ -21,6 +21,7 @@
 <link rel="stylesheet" href="/static/design/glass.css">
 <link rel="stylesheet" href="/static/design/ui.css">
 <link rel="stylesheet" href="/static/pet/pet.css">
+<link rel="stylesheet" href="/static/design/mobile.css">
 
 <script defer src="/static/design/icons.js"></script>
 <script defer src="/static/design/dialog.js"></script>
@@ -198,7 +199,7 @@ body{ display: flex; flex-direction: column; }
 }
 </style>
 </head>
-<body>
+<body class="page-nurse">
 <!-- 装饰性浮动玻璃球 -->
 <div class="orb orb-1" style="position:fixed;top:-80px;right:-120px"></div>
 <div class="orb orb-2" style="position:fixed;bottom:-60px;left:-80px"></div>
@@ -720,11 +721,15 @@ function mobileTab(which){
     list.classList.remove('hide-mobile'); detail.classList.add('hide-mobile');
     bnL.classList.add('active'); bnD.classList.remove('active');
     document.getElementById('navTitle').textContent = '请选择老人开始工作';
+    // 列表回到顶部
+    list.scrollTop = 0;
   }else{
     if(!curPt){ toast('请先选择老人','info'); return; }
     list.classList.add('hide-mobile'); detail.classList.remove('hide-mobile');
     bnL.classList.remove('active'); bnD.classList.add('active');
     document.getElementById('navTitle').textContent = curPt.name;
+    // 详情切过来时回到顶部
+    detail.scrollTop = 0;
   }
 }
 

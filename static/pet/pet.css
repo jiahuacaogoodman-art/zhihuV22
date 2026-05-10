@@ -252,10 +252,41 @@
 }
 
 /* ── 小屏兼容：宠物缩小一些，推到左下角 ─────────────── */
+@media (max-width: 900px){
+  :root{ --pet-scale: 0.55; } /* 宠物 ~106x114 */
+  .pet-host{ left: 12px; bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); }
+  .pet-bubble{ max-width: 220px; font-size: 12px; left: calc(var(--pet-w) + 8px); }
+  .pet-recall{
+    left: 12px;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+    width: 44px; height: 44px;
+  }
+}
 @media (max-width: 640px){
   :root{ --pet-scale: 0.5; } /* 宠物 96x104 */
-  .pet-host{ left: 12px; bottom: 12px; }
+  /* 护工端底部有 tab 栏（56+安全区），把宠物顶上去避免遮挡 */
+  body.page-nurse .pet-host,
+  body.page-nurse .pet-recall,
+  body:has(.bottom-nav) .pet-host,
+  body:has(.bottom-nav) .pet-recall{
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 70px);
+  }
   .pet-bubble{ max-width: 200px; font-size: 12px; left: calc(var(--pet-w) + 8px); }
+}
+/* ≤ 480 在手机上默认隐藏宠物（用户仍可从 ZhPet.show() 唤回）：
+   -- 避免 iPhone SE 这类小屏被遮挡任务卡/提交按钮。
+   -- 同时也节省了动画 CPU。 */
+@media (max-width: 480px){
+  .pet-host{ display: none; }
+  .pet-recall{
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+    width: 40px; height: 40px;
+  }
+  /* 护工端：召回按钮也顶到 tab 上方 */
+  body.page-nurse .pet-recall,
+  body:has(.bottom-nav) .pet-recall{
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 68px);
+  }
 }
 
 /* reduced motion */

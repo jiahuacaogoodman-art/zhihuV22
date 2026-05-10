@@ -1,5 +1,5 @@
-/* 智护银伴 Service Worker v22 · 玻璃设计系统 */
-const CACHE_NAME = 'zhihu-v22-glass';
+/* 智护银伴 Service Worker v22 · 玻璃设计系统 + 手机适配 */
+const CACHE_NAME = 'zhihu-v22-glass-mobile';
 const STATIC_ASSETS = [
   '/',
   '/nurse',
@@ -9,6 +9,7 @@ const STATIC_ASSETS = [
   '/static/design/tokens.css',
   '/static/design/glass.css',
   '/static/design/ui.css',
+  '/static/design/mobile.css',
   '/static/design/ambient.svg',
   '/static/design/icons.js',
   '/static/design/dialog.js',
