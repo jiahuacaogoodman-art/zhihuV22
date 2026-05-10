@@ -32,8 +32,10 @@
 <script defer src="https://cdn.jsdelivr.net/npm/typed.js@2.1.0/dist/typed.umd.js"></script>
 <script defer src="/static/pet/pet.js"></script>
 <style>
-/* ---- 页面级布局：桌面端左侧固定边栏 ---- */
-.app-shell{ display: flex; min-height: 100dvh; align-items: stretch; }
+/* ---- 页面级布局：桌面端左侧固定边栏 ----
+   · 设 app-shell 最大宽 1600px + 居中：超宽屏（2K / 4K / 21:9）时不再把内容横拉到屏幕边缘。
+   · 加浅色背景兜一下两侧留白，观感类似 Notion / Linear 的宽屏策略。 */
+.app-shell{ display: flex; min-height: 100dvh; align-items: stretch; max-width: 1600px; margin: 0 auto; background: rgba(255,255,255,0.02); }
 .page{ display: flex; flex-direction: column; min-height: 100dvh; }
 
 .sidebar{
@@ -230,9 +232,19 @@
   border-radius: 0 0 var(--r-l) var(--r-l);
 }
 @media (max-width: 640px){ .form-footer{ margin: var(--sp-5) calc(var(--sp-4) * -1) calc(var(--sp-4) * -1); padding: var(--sp-3) var(--sp-4); } }
-.section-label{ font: 600 var(--fz-xs)/1.4 var(--font-ui); color: var(--ink-4); letter-spacing: 0.08em; text-transform: uppercase; margin: var(--sp-5) 0 var(--sp-3); display: flex; align-items: center; gap: var(--sp-2); }
-.section-label::before,
-.section-label::after{ content:""; flex:1; height:1px; background: var(--glass-stroke); }
+/* section 小标题：去掉左右两侧装饰横线，保留大小写/字距，改成左侧彩色小竖条作为视觉锚点 */
+.section-label{
+  position: relative;
+  font: 600 var(--fz-xs)/1.4 var(--font-ui); color: var(--ink-3);
+  letter-spacing: 0.08em; text-transform: uppercase;
+  margin: var(--sp-5) 0 var(--sp-3);
+  padding-left: 10px;
+}
+.section-label::before{
+  content:""; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+  width: 3px; height: 12px; border-radius: 2px;
+  background: var(--gradient-accent);
+}
 
 /* Patient cards */
 .patient-list{ display: flex; flex-direction: column; gap: var(--sp-2); }
@@ -327,6 +339,26 @@
   .hero{ padding: var(--sp-4) var(--sp-3) var(--sp-2); }
   .main{ padding: var(--sp-2) var(--sp-3) var(--sp-8); }
   .card{ padding: var(--sp-4); }
+}
+/* ≤480px 手机窄屏进一步收紧：标题、按钮、stat 数字、hero 面板一起瘦身，
+   防止在 iPhone SE / 低端 Android 上出现横向滚动或按钮换行叠加。 */
+@media (max-width: 480px){
+  .hero-title{ font-size: clamp(28px, 7.5vw, 36px); white-space: normal; }
+  .hero-title #typedHero{ display: inline; }
+  .hero-sub{ font-size: 15px; line-height: 1.7; }
+  .hero-actions{ flex-wrap: wrap; gap: 8px; margin-top: var(--sp-3); }
+  .hero-actions .btn{ flex: 1 1 auto; min-width: 0; }
+  .hero-panel{ padding: var(--sp-3); }
+  .stat-num{ font-size: 24px; }
+  .stat{ min-height: 76px; padding: var(--sp-2) 4px; }
+  .stat-lbl{ font-size: 11px; }
+  .card{ padding: var(--sp-3); }
+  .card-head{ margin-bottom: var(--sp-4); gap: var(--sp-2); }
+  .card-head-icon{ width: 34px; height: 34px; }
+  .card-head-text h2{ font-size: 18px; }
+  .nav-tab{ height: 32px; padding: 0 10px; font-size: 12px; }
+  .sidebar-brand .brand-main{ font-size: 14px; }
+  .sidebar-brand .mark{ width: 32px; height: 32px; }
 }
 
 /* ── 强化 hero：Typed 光标 + 装饰芯片 ─────────── */
