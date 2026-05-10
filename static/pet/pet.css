@@ -1,0 +1,265 @@
+/* === 智护银伴 · 桌面宠物 ====================================================
+   Desktop companion widget：可拖拽、可对话、会对页面事件做反应。
+   - 精灵图 1536x1872，8 列 x 9 行，每格 192x208
+   - 屏上显示尺寸 120x130（可缩放）
+   - 气泡、底座、收起/展开按钮全部玻璃质感
+   ========================================================================== */
+
+/* 基础变量：一处可调 */
+:root{
+  --pet-cell-w: 192px;     /* 精灵单帧原始尺寸 */
+  --pet-cell-h: 208px;
+  --pet-scale: 0.625;      /* 显示缩放：192*0.625 = 120 */
+  --pet-w: calc(var(--pet-cell-w) * var(--pet-scale));  /* 120 */
+  --pet-h: calc(var(--pet-cell-h) * var(--pet-scale));  /* 130 */
+  --pet-sheet-w: calc(1536px * var(--pet-scale)); /* 960 */
+  --pet-sheet-h: calc(1872px * var(--pet-scale)); /* 1170 */
+}
+
+/* ── 外层容器：固定在右下角，用户可拖拽 ─────────────── */
+.pet-host{
+  position: fixed;
+  right: 32px;
+  bottom: 28px;
+  z-index: 60;
+  width: var(--pet-w);
+  height: calc(var(--pet-h) + 12px); /* 多一点空间放阴影 */
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  transition: opacity 240ms var(--ease, ease), transform 240ms var(--ease-spring, ease);
+  will-change: transform;
+}
+.pet-host.dragging{ cursor: grabbing; transition: none; }
+.pet-host.hidden{ opacity: 0; transform: translateY(30px) scale(0.6); pointer-events: none; }
+
+/* 倒影阴影，宠物悬浮感 */
+.pet-shadow{
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 70%;
+  height: 14px;
+  transform: translateX(-50%);
+  background: radial-gradient(ellipse at center,
+               rgba(15,23,42,0.35) 0%,
+               rgba(15,23,42,0.18) 40%,
+               transparent 72%);
+  filter: blur(6px);
+  animation: pet-shadow-breath 1.6s ease-in-out infinite alternate;
+}
+@keyframes pet-shadow-breath{
+  from{ transform: translateX(-50%) scale(1); opacity: 0.85; }
+  to  { transform: translateX(-50%) scale(0.86); opacity: 0.55; }
+}
+
+/* ── 精灵：绝对定位在容器内，使用 background-position 切帧 ── */
+.pet-sprite{
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--pet-w);
+  height: var(--pet-h);
+  background-image: url("/static/pet/spritesheet.webp");
+  background-repeat: no-repeat;
+  background-size: var(--pet-sheet-w) var(--pet-sheet-h);
+  background-position: 0 0;
+  cursor: grab;
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+  filter: drop-shadow(0 12px 24px rgba(20, 184, 166, 0.22))
+          drop-shadow(0 4px 8px rgba(15, 23, 42, 0.12));
+  transition: filter 240ms ease;
+}
+.pet-host:hover .pet-sprite{
+  filter: drop-shadow(0 14px 28px rgba(20, 184, 166, 0.40))
+          drop-shadow(0 6px 10px rgba(15, 23, 42, 0.18));
+}
+.pet-host.dragging .pet-sprite{ cursor: grabbing; }
+
+/* PNG fallback（浏览器不支持 webp 会被 JS 切换） */
+.pet-sprite.fallback-png{
+  background-image: url("/static/pet/spritesheet.png");
+}
+
+/* ── 轻微漂浮气息：不打断精灵动画，只做 Y 轴呼吸 ── */
+.pet-host:not(.dragging) .pet-sprite{
+  animation: pet-breath 2.4s ease-in-out infinite alternate;
+}
+@keyframes pet-breath{
+  from{ transform: translateY(0); }
+  to  { transform: translateY(-4px); }
+}
+
+/* ── 气泡对话框 ──────────────────────────────────── */
+.pet-bubble{
+  position: absolute;
+  right: calc(var(--pet-w) + 12px);
+  bottom: calc(var(--pet-h) - 60px);
+  max-width: 260px;
+  min-width: 160px;
+  padding: 10px 14px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(18px) saturate(180%);
+  -webkit-backdrop-filter: blur(18px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 14px 30px rgba(20, 184, 166, 0.18),
+    0 6px 14px rgba(15, 23, 42, 0.10);
+  color: var(--ink-1, #0B1220);
+  font: 500 13px/1.55 var(--font-ui, "Inter", "Noto Sans SC", sans-serif);
+  opacity: 0;
+  transform: translateY(6px) scale(0.94);
+  transform-origin: bottom right;
+  pointer-events: none;
+  transition: opacity 240ms var(--ease, ease), transform 320ms var(--ease-spring, cubic-bezier(0.34,1.56,0.64,1));
+}
+.pet-bubble.show{
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+/* 气泡尾巴：右下角指向宠物头顶 */
+.pet-bubble::after{
+  content: "";
+  position: absolute;
+  right: -8px;
+  bottom: 12px;
+  width: 14px;
+  height: 14px;
+  background: rgba(255, 255, 255, 0.95);
+  border-right: 1px solid rgba(255, 255, 255, 0.9);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.9);
+  transform: rotate(-45deg);
+  border-bottom-right-radius: 4px;
+  box-shadow: 2px 2px 4px rgba(15,23,42,0.05);
+}
+
+.pet-bubble-title{
+  font-weight: 700;
+  color: var(--accent-ink, #0F766E);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+.pet-bubble-text{
+  color: var(--ink-2, #1E293B);
+  word-break: break-word;
+}
+
+/* 状态条：在气泡底下贴一个小标签 */
+.pet-bubble-state{
+  display: inline-block;
+  margin-top: 4px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(94,234,212,0.35), rgba(129,140,248,0.25));
+  color: var(--accent-ink, #0F766E);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+/* ── 左下角：隐藏后的召回按钮 ─────────────────────── */
+.pet-recall{
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 60;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  background: var(--gradient-accent, linear-gradient(135deg, #2DD4BF, #14B8A6 55%, #0D9488));
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    0 10px 24px rgba(20, 184, 166, 0.38),
+    0 4px 8px rgba(20, 184, 166, 0.20);
+  transition: transform 240ms var(--ease-spring, cubic-bezier(0.34,1.56,0.64,1));
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(30px) scale(0.6);
+}
+.pet-recall.show{
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0) scale(1);
+}
+.pet-recall:hover{ transform: translateY(-2px) scale(1.06); }
+.pet-recall i{ font-size: 20px; }
+
+/* ── 右键/长按菜单：换一个状态、换皮肤 ─────────────── */
+.pet-menu{
+  position: fixed;
+  z-index: 70;
+  min-width: 180px;
+  padding: 6px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 20px 40px rgba(15, 23, 42, 0.18);
+  display: none;
+  flex-direction: column;
+  gap: 2px;
+}
+.pet-menu.show{ display: flex; animation: pet-menu-in 180ms var(--ease, ease); }
+@keyframes pet-menu-in{ from{ opacity:0; transform: translateY(4px);} to{ opacity:1; transform: none;} }
+
+.pet-menu-head{
+  padding: 6px 10px 4px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--ink-4, #94A3B8);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.pet-menu-item{
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 8px 10px;
+  border-radius: 8px;
+  color: var(--ink-1, #0B1220);
+  font: 500 13px/1.2 var(--font-ui, "Inter", "Noto Sans SC", sans-serif);
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background 120ms ease, color 120ms ease;
+}
+.pet-menu-item:hover{
+  background: linear-gradient(135deg, rgba(94,234,212,0.20), rgba(129,140,248,0.10));
+  color: var(--accent-ink, #0F766E);
+}
+.pet-menu-item i{ width: 16px; text-align: center; color: var(--accent, #14B8A6); }
+.pet-menu-sep{
+  height: 1px;
+  margin: 4px 2px;
+  background: rgba(15,23,42,0.06);
+}
+
+/* ── 小屏兼容：宠物缩小一些，推到角落 ─────────────── */
+@media (max-width: 640px){
+  :root{ --pet-scale: 0.5; } /* 宠物 96x104 */
+  .pet-host{ right: 12px; bottom: 12px; }
+  .pet-bubble{ max-width: 200px; font-size: 12px; right: calc(var(--pet-w) + 8px); }
+}
+
+/* reduced motion */
+@media (prefers-reduced-motion: reduce){
+  .pet-host:not(.dragging) .pet-sprite{ animation: none; }
+  .pet-shadow{ animation: none; }
+}

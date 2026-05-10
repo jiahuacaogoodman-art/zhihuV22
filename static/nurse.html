@@ -12,12 +12,22 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Serif+SC:wght@500;600;700&display=swap">
+
+<!-- 外部增强库：图标 / 滚动动画 -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.css">
+
 <link rel="stylesheet" href="/static/design/tokens.css">
 <link rel="stylesheet" href="/static/design/glass.css">
 <link rel="stylesheet" href="/static/design/ui.css">
+<link rel="stylesheet" href="/static/pet/pet.css">
+
 <script defer src="/static/design/icons.js"></script>
 <script defer src="/static/design/dialog.js"></script>
 <script defer src="/static/design/evidence.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+<script defer src="/static/pet/pet.js"></script>
 <style>
 html, body{ height: 100%; overflow: hidden; }
 body{ display: flex; flex-direction: column; }
@@ -722,6 +732,15 @@ function mobileTab(which){
 if('serviceWorker' in navigator) navigator.serviceWorker.register('/static/sw.js').catch(()=>{});
 
 loadPts();
+
+/* ═══════════ 外部库初始化 ═══════════ */
+window.addEventListener('load', () => {
+  if(window.AOS){ AOS.init({ once: true, duration: 650, easing: 'ease-out-cubic', offset: 40 }); }
+  if(window.gsap){ gsap.from('.nav', { y: -12, opacity: 0, duration: 0.6, ease: 'power2.out' }); }
+  if(window.ZhPet){
+    setTimeout(()=> window.ZhPet.say('护工端已就绪，选一位老人开始吧～', { title: '护工模式', duration: 3400 }), 1200);
+  }
+});
 </script>
 </body>
 </html>

@@ -12,12 +12,25 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Serif+SC:wght@500;600;700&display=swap">
+
+<!-- 外部增强库（CDN）：图标 / 滚动动画 / 打字机 / GSAP 动效 / SweetAlert / AOS -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.css">
+
 <link rel="stylesheet" href="/static/design/tokens.css">
 <link rel="stylesheet" href="/static/design/glass.css">
 <link rel="stylesheet" href="/static/design/ui.css">
+<link rel="stylesheet" href="/static/pet/pet.css">
+
 <script defer src="/static/design/icons.js"></script>
 <script defer src="/static/design/dialog.js"></script>
 <script defer src="/static/design/evidence.js"></script>
+
+<!-- 外部 JS 库 -->
+<script defer src="https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/typed.js@2.1.0/dist/typed.umd.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+<script defer src="/static/pet/pet.js"></script>
 <style>
 /* ---- 页面级微调 ---- */
 .page{ display: flex; flex-direction: column; min-height: 100dvh; }
@@ -171,6 +184,53 @@
   .main{ padding: var(--sp-5) var(--sp-3) var(--sp-8); }
   .card{ padding: var(--sp-4); }
 }
+
+/* ── 强化 hero：Typed 光标 + 装饰芯片 ─────────── */
+.typed-cursor{ color: var(--accent); font-weight: 400; }
+.hero-title .typed-out{ color: var(--accent); font-style: normal; background: linear-gradient(135deg,#14B8A6,#818CF8); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+/* ── Feature grid：三张能力卡 ───────────────── */
+.feature-grid{
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--sp-4);
+  margin-top: var(--sp-6);
+}
+@media (max-width: 900px){ .feature-grid{ grid-template-columns: 1fr; } }
+.feature-card{
+  padding: var(--sp-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  transition: transform var(--dur-base) var(--ease), box-shadow var(--dur-base) var(--ease);
+}
+.feature-card:hover{ transform: translateY(-4px); }
+.feature-icon{
+  width: 48px; height: 48px;
+  border-radius: 14px;
+  background: var(--gradient-accent);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  box-shadow: 0 8px 22px rgba(20,184,166,0.32), inset 0 1px 0 rgba(255,255,255,0.35);
+}
+.feature-card.alt .feature-icon{ background: linear-gradient(135deg,#818CF8,#6366F1); box-shadow: 0 8px 22px rgba(129,140,248,0.32), inset 0 1px 0 rgba(255,255,255,0.35); }
+.feature-card.warm .feature-icon{ background: linear-gradient(135deg,#F9A8D4,#EC4899); box-shadow: 0 8px 22px rgba(236,72,153,0.28), inset 0 1px 0 rgba(255,255,255,0.35); }
+.feature-title{ font: 600 18px/1.3 var(--font-ui); color: var(--ink-1); letter-spacing: -0.01em; }
+.feature-desc{ font: 400 14px/1.7 var(--font-ui); color: var(--ink-3); }
+.feature-tags{ display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; padding-top: var(--sp-2); }
+
+/* ── 图标从 Font Awesome 渲染 ─────────────── */
+.fa-icon{ color: var(--accent-ink); }
+
+/* hero kicker 动效 */
+.hero-kicker{ animation: kicker-pulse 2.4s ease-in-out infinite alternate; }
+@keyframes kicker-pulse{
+  from{ box-shadow: 0 0 0 0 rgba(20,184,166,0.30); }
+  to  { box-shadow: 0 0 0 8px rgba(20,184,166,0); }
+}
 </style>
 </head>
 <body>
@@ -201,17 +261,18 @@
 <!-- ═════════ HERO ═════════ -->
 <section class="hero">
   <div class="hero-inner">
-    <div>
-      <span class="hero-kicker"><span class="icon-s" data-icon="shield" style="width:12px;height:12px"></span>本地离线运行 · 数据不出院</span>
-      <h1 class="hero-title">智护银伴<br>让老人护理<em>更有依据</em></h1>
+    <div data-aos="fade-right" data-aos-duration="800">
+      <span class="hero-kicker"><i class="fa-solid fa-shield-halved" style="color:var(--accent-ink);margin-right:4px"></i>本地离线运行 · 数据不出院</span>
+      <h1 class="hero-title">智护银伴<br><span id="typedHero" class="typed-out"></span></h1>
       <p class="hero-sub">结合老人的档案、病历和过往护理记录，自动给出可落地的护理建议。每条建议都能看到来源，之前怎么处理、效果如何，下次会继续参考。</p>
       <div class="hero-actions">
-        <button class="btn btn-primary" onclick="switchTab('dec')"><span class="icon-s" data-icon="sparkles"></span>写一次护理建议</button>
-        <button class="btn btn-outline" onclick="switchTab('list')"><span class="icon-s" data-icon="users"></span>查看老人档案</button>
+        <button class="btn btn-primary" onclick="switchTab('dec')"><i class="fa-solid fa-wand-magic-sparkles" style="margin-right:2px"></i>写一次护理建议</button>
+        <button class="btn btn-outline" onclick="switchTab('list')"><i class="fa-solid fa-user-group" style="margin-right:2px"></i>查看老人档案</button>
+        <button class="btn btn-ghost" onclick="window.ZhPet && window.ZhPet.react('greet')" title="唤出小助手"><i class="fa-solid fa-paw" style="margin-right:2px;color:var(--accent)"></i>Hi，银伴</button>
       </div>
     </div>
-    <div class="glass hero-panel">
-      <div class="hero-panel-title label"><span class="icon-s" data-icon="layers"></span>系统概览</div>
+    <div class="glass hero-panel" data-aos="fade-left" data-aos-duration="800" data-aos-delay="120">
+      <div class="hero-panel-title label"><i class="fa-solid fa-layer-group" style="margin-right:6px"></i>系统概览</div>
       <div class="stat-grid">
         <div class="stat"><div class="stat-num" id="statTotal">0</div><div class="stat-lbl">老人档案</div></div>
         <div class="stat"><div class="stat-num" id="statDec">0</div><div class="stat-lbl">今日 AI 建议</div></div>
@@ -223,13 +284,47 @@
       </div>
     </div>
   </div>
+
+  <!-- 能力展示三栏 -->
+  <div class="container feature-grid">
+    <div class="glass feature-card" data-aos="fade-up" data-aos-duration="700">
+      <div class="feature-icon"><i class="fa-solid fa-database"></i></div>
+      <div class="feature-title">本地 RAG 档案库</div>
+      <div class="feature-desc">老人档案、病历照片、OCR 文本、既往决策全部在本地 ChromaDB，混合检索 + RRF 融合，召回精准又可解释。</div>
+      <div class="feature-tags">
+        <span class="chip chip-accent">BGE 向量</span>
+        <span class="chip chip-blue">BM25 稀疏</span>
+        <span class="chip chip-green">离线可用</span>
+      </div>
+    </div>
+    <div class="glass feature-card alt" data-aos="fade-up" data-aos-duration="700" data-aos-delay="100">
+      <div class="feature-icon"><i class="fa-solid fa-brain"></i></div>
+      <div class="feature-title">本地 LLM 护理建议</div>
+      <div class="feature-desc">Ollama + huatuo-o1 生成建议，流式 SSE 返回，每条意见都能追溯到证据 E1…En，给护理人员留一份判断依据。</div>
+      <div class="feature-tags">
+        <span class="chip chip-accent">SSE 流式</span>
+        <span class="chip chip-blue">证据溯源</span>
+        <span class="chip chip-amber">结构化输出</span>
+      </div>
+    </div>
+    <div class="glass feature-card warm" data-aos="fade-up" data-aos-duration="700" data-aos-delay="200">
+      <div class="feature-icon"><i class="fa-solid fa-heart-pulse"></i></div>
+      <div class="feature-title">闭环决策记忆</div>
+      <div class="feature-desc">每次 AI 建议都可回填效果（有效 / 部分 / 无效），历史处理方式会作为经验被下一次推理参考，越用越懂这家院。</div>
+      <div class="feature-tags">
+        <span class="chip chip-green">效果回填</span>
+        <span class="chip chip-accent">经验沉淀</span>
+        <span class="chip chip-blue">SBAR 交接</span>
+      </div>
+    </div>
+  </div>
 </section>
 
 <!-- ═════════ MAIN ═════════ -->
 <main class="main container">
 
   <!-- 录入 -->
-  <section id="tab-add" class="glass card">
+  <section id="tab-add" class="glass card" data-aos="fade-up" data-aos-duration="600">
     <div class="card-head">
       <div class="card-head-icon"><span class="icon" data-icon="plus"></span></div>
       <div class="card-head-text"><h2>录入老人档案</h2><p>填写完整信息，用于后续护理和 AI 建议参考</p></div>
@@ -276,7 +371,7 @@
   </section>
 
   <!-- 档案列表 -->
-  <section id="tab-list" class="glass card" style="display:none;">
+  <section id="tab-list" class="glass card" data-aos="fade-up" data-aos-duration="600" style="display:none;">
     <div class="card-head">
       <div class="card-head-icon"><span class="icon" data-icon="users"></span></div>
       <div class="card-head-text"><h2>档案管理</h2><p>查看、编辑、删除老人档案</p></div>
@@ -289,7 +384,7 @@
   </section>
 
   <!-- 病历上传 -->
-  <section id="tab-archive" class="glass card" style="display:none;">
+  <section id="tab-archive" class="glass card" data-aos="fade-up" data-aos-duration="600" style="display:none;">
     <div class="card-head">
       <div class="card-head-icon"><span class="icon" data-icon="upload"></span></div>
       <div class="card-head-text"><h2>病历上传</h2><p>上传门诊、住院等病历照片，系统会自动识别文字并归入该老人档案</p></div>
@@ -320,7 +415,7 @@
   </section>
 
   <!-- AI 护理建议 -->
-  <section id="tab-dec" class="glass card" style="display:none;">
+  <section id="tab-dec" class="glass card" data-aos="fade-up" data-aos-duration="600" style="display:none;">
     <div class="card-head">
       <div class="card-head-icon"><span class="icon" data-icon="sparkles"></span></div>
       <div class="card-head-text"><h2>AI 护理建议</h2><p>AI 会结合这位老人的档案、病历和过往护理记录给出建议，并标注每条建议来自哪一份材料</p></div>
@@ -359,7 +454,7 @@
   </section>
 
   <!-- 操作记录 -->
-  <section id="tab-hist" class="glass card" style="display:none;">
+  <section id="tab-hist" class="glass card" data-aos="fade-up" data-aos-duration="600" style="display:none;">
     <div class="card-head">
       <div class="card-head-icon"><span class="icon" data-icon="history"></span></div>
       <div class="card-head-text"><h2>操作记录</h2><p>最近 50 条本机操作</p></div>
@@ -676,6 +771,8 @@ async function submitDecision(){
   if(!pid || !symptom){ toast('请选择老人并填写症状','warning'); return; }
   const btn = document.getElementById('decisionBtn'), txt = document.getElementById('decisionTxt');
   btn.disabled = true; txt.innerHTML = '<span class="ring"></span> AI 分析中…';
+  // 让宠物进入"查资料"状态
+  if(window.ZhPet) window.ZhPet.react('thinking', '我在翻档案和病历…');
   const t0 = Date.now();
   try{
     await streamDecision(pid, symptom);
@@ -684,9 +781,10 @@ async function submitDecision(){
     decCount++; document.getElementById('statDec').textContent = decCount;
     addHist('decision', `AI 建议：${allPts.find(p=>p.patient_id===pid)?.name||pid} — ${symptom.slice(0,20)}`);
     await refreshMemory(pid);
+    if(window.ZhPet) window.ZhPet.react('success', `建议已生成，用时 ${elapsed}`);
   }catch(e){
-    try{ await fallbackDecision(pid, symptom); }
-    catch(e2){ toast('AI 暂时不可用，请确认本地模型服务已启动','error'); }
+    try{ await fallbackDecision(pid, symptom); if(window.ZhPet) window.ZhPet.react('success','建议已生成'); }
+    catch(e2){ if(window.ZhPet) window.ZhPet.react('error','AI 暂时不可用'); toast('AI 暂时不可用，请确认本地模型服务已启动','error'); }
   }finally{ btn.disabled=false; txt.textContent='获取 AI 护理建议'; }
 }
 
@@ -784,6 +882,50 @@ document.getElementById('pwaBtn')?.addEventListener('click', async ()=>{
   deferredPrompt = null;
   document.getElementById('pwaBanner').classList.remove('show');
 });
+
+/* ═══════════ 外部库初始化 ═══════════ */
+window.addEventListener('load', () => {
+  // AOS：滚动出现动画
+  if(window.AOS){
+    AOS.init({ once: true, duration: 700, easing: 'ease-out-cubic', offset: 60 });
+  }
+  // Typed.js：hero 标题打字机
+  if(window.Typed){
+    new Typed('#typedHero', {
+      strings: ['让老人护理 <em>更有依据</em>', '把每一次决定 <em>变成经验</em>', '让每一条建议 <em>可被追溯</em>'],
+      typeSpeed: 55,
+      backSpeed: 28,
+      backDelay: 2400,
+      loop: true,
+      smartBackspace: true,
+      cursorChar: '▌'
+    });
+  }
+  // GSAP：hero 动作按钮微动
+  if(window.gsap){
+    gsap.from('.hero-actions .btn', {
+      y: 12, opacity: 0, duration: 0.6, stagger: 0.08, ease: 'power2.out', delay: 0.3
+    });
+    gsap.from('.feature-card', {
+      y: 24, opacity: 0, duration: 0.7, stagger: 0.1, ease: 'power3.out', delay: 0.4
+    });
+  }
+});
+
+/* 切换 tab 时也通知宠物：跑一下 */
+const _origSwitchTab = switchTab;
+switchTab = function(t){
+  _origSwitchTab(t);
+  if(window.ZhPet){
+    // 根据 tab 给宠物不同反应
+    const map = { add: 'idle', list: 'idle', archive: 'idle', dec: 'talk', hist: 'idle' };
+    const act = map[t];
+    if(act === 'talk') window.ZhPet.say('准备好帮你写护理建议啦～', { title: '提示', duration: 2200 });
+    else window.ZhPet.react('jump');
+  }
+  // AOS 在切换 tab 时需要刷新，让新显示的 section 进入动画
+  if(window.AOS) setTimeout(()=>AOS.refreshHard(), 40);
+};
 </script>
 </body>
 </html>
