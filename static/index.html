@@ -353,7 +353,13 @@
     padding: var(--sp-2) !important;
     gap: 6px;
     z-index: 5;
-    /* 把原先 card 的 margin-top:auto 拿掉，紧凑堆叠 */
+    /* 强制给挂件一个实体背景：原来的 .glass 在浅色页面上会透明看不见。
+       用 95% 不透明白 + teal 细描边 + 柔阴影，让它作为"悬浮小卡"被看到。 */
+    background: rgba(255,255,255,0.95) !important;
+    border: 1px solid rgba(14,165,164,0.20);
+    box-shadow: 0 6px 18px rgba(15,23,42,0.08), 0 1px 2px rgba(15,23,42,0.04);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
   /* 不重要的东西在手机端全部隐藏：Lottie 动画、标题、底部说明 */
   .hero-panel .hero-panel-title,
