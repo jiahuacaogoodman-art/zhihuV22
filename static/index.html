@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>智护银伴 · 管理端</title>
+<link rel="manifest" href="/static/manifest.json">
+<meta name="theme-color" content="#0EA5A4">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Serif+SC:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="/static/design/tokens.css">
+<link rel="stylesheet" href="/static/design/glass.css">
+<link rel="stylesheet" href="/static/design/ui.css">
+<script defer src="/static/design/icons.js"></script>
+<script defer src="/static/design/dialog.js"></script>
+<script defer src="/static/design/evidence.js"></script>
+<style>
+/* ---- 页面级微调 ---- */
+.page{ display: flex; flex-direction: column; min-height: 100dvh; }
+.nav{
+  position: sticky; top: 0; z-index: 50;
+  display: flex; align-items: center; gap: var(--sp-4);
+  padding: 0 var(--sp-5); height: 64px;
+}
+.nav-brand{ display: flex; align-items: center; gap: var(--sp-2); color: #fff; font-family: var(--font-display); font-weight: 600; font-size: 18px; letter-spacing: 0.02em; }
+.nav-brand .mark{
+  width: 36px; height: 36px; border-radius: var(--r-s);
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-ink) 100%);
+  display: inline-flex; align-items: center; justify-content: center; color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.3);
+}
+.nav-brand .sub{ font: 500 12px/1 var(--font-ui); color: rgba(226,232,240,0.65); margin-left: 6px; letter-spacing: 0.05em; }
+.nav-tabs{ display: flex; gap: 2px; flex: 1; justify-content: center; overflow-x: auto; }
+.nav-tabs::-webkit-scrollbar{ display: none; }
+.nav-tab{
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 36px; padding: 0 var(--sp-3); border-radius: var(--r-s);
+  color: rgba(226,232,240,0.72); font: 500 var(--fz-sm)/1 var(--font-ui);
+  background: transparent; border: 1px solid transparent; cursor: pointer;
+  transition: all var(--dur-fast) var(--ease); white-space: nowrap;
+}
+.nav-tab:hover{ color: #fff; background: rgba(255,255,255,0.06); }
+.nav-tab.active{ color: #fff; background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.15); }
+
+/* Hero */
+.hero{ padding: var(--sp-8) var(--sp-5) var(--sp-7); }
+.hero-inner{ max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: 1.2fr 1fr; gap: var(--sp-7); align-items: end; }
+.hero-kicker{ display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 12px; border-radius: 999px; background: rgba(14,165,164,0.12); color: var(--accent-ink); font: 600 var(--fz-xs)/1 var(--font-ui); letter-spacing: 0.04em; }
+.hero-title{ margin: var(--sp-3) 0 var(--sp-3); font-size: clamp(38px, 5.2vw, 64px); font-family: var(--font-display); font-weight: 600; line-height: 1.08; color: var(--ink-1); letter-spacing: -0.02em; }
+.hero-title em{ color: var(--accent); font-style: normal; }
+.hero-sub{ font: 400 17px/1.8 var(--font-ui); color: var(--ink-3); max-width: 52ch; }
+.hero-actions{ margin-top: var(--sp-5); display: flex; gap: var(--sp-2); }
+
+.hero-panel{ padding: var(--sp-5); display: flex; flex-direction: column; gap: var(--sp-4); }
+.hero-panel-title{ display: flex; align-items: center; gap: 8px; color: var(--ink-3); }
+.stat-grid{ display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--sp-3); }
+.stat{ padding: var(--sp-3); border-radius: var(--r-m); background: rgba(255,255,255,0.65); border: 1px solid rgba(15,23,42,0.05); }
+.stat-num{ font-family: var(--font-display); font-size: 32px; font-weight: 600; color: var(--ink-1); letter-spacing: -0.02em; line-height: 1; }
+.stat-lbl{ font: 500 var(--fz-xs)/1.4 var(--font-ui); color: var(--ink-4); margin-top: 6px; letter-spacing: 0.03em; }
+.hero-lead{ display: flex; flex-direction: column; gap: 4px; padding: var(--sp-3); border-left: 3px solid var(--accent); background: rgba(14,165,164,0.06); border-radius: 0 var(--r-s) var(--r-s) 0; }
+
+/* Main */
+.main{ flex: 1; padding: var(--sp-6) var(--sp-5) var(--sp-8); }
+.card{ padding: var(--sp-5) var(--sp-6); }
+.card-head{ display: flex; align-items: center; gap: var(--sp-3); margin-bottom: var(--sp-5); }
+.card-head-icon{ width: 40px; height: 40px; border-radius: var(--r-s); display: inline-flex; align-items: center; justify-content: center; background: rgba(14,165,164,0.12); color: var(--accent-ink); }
+.card-head-text h2{ font: 600 var(--fz-xl)/1.2 var(--font-ui); color: var(--ink-1); letter-spacing: -0.01em; }
+.card-head-text p{ font: 400 var(--fz-sm)/1.5 var(--font-ui); color: var(--ink-3); margin-top: 2px; }
+
+/* 每组按字段数固定列数，充分利用宽度 */
+.form-grid{ display: grid; gap: var(--sp-4); }
+.form-grid.cols-1{ grid-template-columns: 1fr; }
+.form-grid.cols-2{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.form-grid.cols-3{ grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.form-grid.cols-4{ grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.full{ grid-column: 1 / -1; }
+.span-2{ grid-column: span 2; }
+/* 响应式坍缩：中屏降 2 列，小屏降 1 列 */
+@media (max-width: 960px){
+  .form-grid.cols-3,
+  .form-grid.cols-4{ grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .span-2{ grid-column: span 2; }
+}
+@media (max-width: 560px){
+  .form-grid.cols-2,
+  .form-grid.cols-3,
+  .form-grid.cols-4{ grid-template-columns: 1fr; }
+  .span-2{ grid-column: 1 / -1; }
+}
+/* 操作栏：粘底，常驻可见 */
+.form-footer{
+  position: sticky; bottom: 0;
+  margin: var(--sp-5) calc(var(--sp-6) * -1) calc(var(--sp-5) * -1);
+  padding: var(--sp-4) var(--sp-6);
+  background: linear-gradient(180deg, rgba(255,255,255,0.0) 0%, rgba(255,255,255,0.85) 40%, rgba(255,255,255,0.95) 100%);
+  backdrop-filter: blur(12px);
+  display: flex; justify-content: flex-end; gap: var(--sp-2);
+  border-radius: 0 0 var(--r-l) var(--r-l);
+}
+@media (max-width: 640px){ .form-footer{ margin: var(--sp-5) calc(var(--sp-4) * -1) calc(var(--sp-4) * -1); padding: var(--sp-3) var(--sp-4); } }
+.section-label{ font: 600 var(--fz-xs)/1.4 var(--font-ui); color: var(--ink-4); letter-spacing: 0.08em; text-transform: uppercase; margin: var(--sp-5) 0 var(--sp-3); display: flex; align-items: center; gap: var(--sp-2); }
+.section-label::before,
+.section-label::after{ content:""; flex:1; height:1px; background: var(--glass-stroke); }
+
+/* Patient cards */
+.patient-list{ display: flex; flex-direction: column; gap: var(--sp-2); }
+.patient-row{
+  display: grid;
+  grid-template-columns: 40px minmax(0,1fr) auto auto;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+  border-radius: var(--r-m);
+  background: rgba(255,255,255,0.82);
+  border: 1px solid rgba(15,23,42,0.06);
+  align-items: center;
+  transition: border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
+}
+.patient-row:hover{ border-color: rgba(14,165,164,0.35); box-shadow: 0 4px 14px rgba(14,165,164,0.08); }
+.patient-avatar{ width: 40px; height: 40px; border-radius: 50%; background: rgba(14,165,164,0.10); color: var(--accent-ink); display: flex; align-items: center; justify-content: center; font-weight: 600; font-family: var(--font-display); font-size: 16px; }
+.patient-info{ min-width: 0; }
+.patient-name{ font: 600 var(--fz-md)/1.3 var(--font-ui); color: var(--ink-1); }
+.patient-meta{ font: 400 var(--fz-xs)/1.4 var(--font-ui); color: var(--ink-3); margin-top: 2px; }
+.patient-tags{ display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; max-width: 280px; }
+.patient-actions{ display: flex; gap: var(--sp-1); }
+
+/* Decision */
+.decision-grid{ display: grid; grid-template-columns: 1.6fr 1fr; gap: var(--sp-5); }
+.decision-main{ display: flex; flex-direction: column; gap: var(--sp-4); }
+.quick-chips{ display: flex; flex-wrap: wrap; gap: 6px; }
+.advice-card{ padding: var(--sp-4); border-radius: var(--r-m); background: rgba(255,255,255,0.75); border: 1px solid rgba(15,23,42,0.06); }
+.advice-card .label{ color: var(--accent-ink); display: inline-flex; align-items: center; gap: 6px; }
+.advice-text{ margin-top: var(--sp-2); font: 400 var(--fz-md)/1.8 var(--font-ui); color: var(--ink-1); white-space: pre-wrap; }
+.advice-cursor{ display: inline-block; width: 2px; height: 1em; background: var(--accent); vertical-align: -2px; animation: advice-blink 0.9s infinite; }
+@keyframes advice-blink{ 0%,100%{opacity:1} 50%{opacity:0} }
+.disclaimer{ padding: var(--sp-3) var(--sp-4); border-radius: var(--r-s); background: rgba(217,119,6,0.08); color: var(--amber); font: 400 var(--fz-xs)/1.5 var(--font-ui); display: flex; gap: 8px; align-items: flex-start; }
+
+/* Archive */
+.upload-drop{ padding: var(--sp-5); border-radius: var(--r-m); border: 1.5px dashed rgba(15,23,42,0.15); background: rgba(255,255,255,0.50); text-align: center; transition: border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease); }
+.upload-drop:hover, .upload-drop.drag{ border-color: var(--accent); background: rgba(14,165,164,0.04); }
+.record-grid{ display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--sp-3); }
+.record-card{ background: #fff; border: 1px solid rgba(15,23,42,0.06); border-radius: var(--r-m); overflow: hidden; display: flex; flex-direction: column; }
+.record-img{ width: 100%; height: 160px; object-fit: cover; background: var(--ink-5); }
+.record-body{ padding: var(--sp-3); display: flex; flex-direction: column; gap: 6px; flex: 1; }
+.record-title{ font: 600 var(--fz-sm)/1.4 var(--font-ui); color: var(--ink-1); }
+.ocr-box{ padding: var(--sp-2); border-radius: var(--r-s); background: rgba(15,23,42,0.04); font: 400 var(--fz-xs)/1.6 var(--font-ui); color: var(--ink-2); max-height: 96px; overflow: auto; white-space: pre-wrap; }
+
+/* History */
+.hist-list{ display: flex; flex-direction: column; gap: 4px; }
+.hist-row{ display: grid; grid-template-columns: 28px 1fr auto; gap: var(--sp-3); padding: var(--sp-3); border-radius: var(--r-s); background: rgba(255,255,255,0.70); border: 1px solid rgba(15,23,42,0.05); align-items: center; }
+.hist-dot{ width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+
+/* PWA banner */
+.pwa-banner{ position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 40; display: none; align-items: center; gap: var(--sp-3); padding: var(--sp-3) var(--sp-4); border-radius: var(--r-m); background: rgba(11,18,32,0.92); color: #fff; box-shadow: var(--shadow-4); max-width: calc(100% - 32px); }
+.pwa-banner.show{ display: flex; }
+
+@media (max-width: 960px){
+  .hero-inner{ grid-template-columns: 1fr; gap: var(--sp-5); }
+  .decision-grid{ grid-template-columns: 1fr; }
+  .patient-tags{ grid-column: 1 / -1; justify-content: flex-start; }
+  .patient-row{ grid-template-columns: 40px 1fr auto; }
+  .nav-tabs{ justify-content: flex-start; }
+}
+@media (max-width: 640px){
+  .nav{ padding: 0 var(--sp-3); gap: var(--sp-2); height: 56px; }
+  .nav-brand .sub{ display: none; }
+  .hero{ padding: var(--sp-6) var(--sp-3) var(--sp-5); }
+  .main{ padding: var(--sp-5) var(--sp-3) var(--sp-8); }
+  .card{ padding: var(--sp-4); }
+}
+</style>
+</head>
+<body>
+<!-- 装饰性浮动玻璃球（固定在视窗里，做光源折射对象） -->
+<div class="orb orb-1" style="position:fixed;top:-80px;right:-120px"></div>
+<div class="orb orb-2" style="position:fixed;bottom:-60px;left:-80px"></div>
+<div class="orb orb-3" style="position:fixed;top:45%;left:40%"></div>
+
+<div class="page">
+
+<!-- ═════════ NAV ═════════ -->
+<nav class="nav glass-l1">
+  <a class="nav-brand" href="/">
+    <span class="mark"><span class="icon-s" data-icon="heart"></span></span>
+    <span>智护银伴</span>
+    <span class="sub">管理端</span>
+  </a>
+  <div class="nav-tabs" role="tablist">
+    <button class="nav-tab active" data-tab="add"><span class="icon-s" data-icon="plus"></span>录入档案</button>
+    <button class="nav-tab" data-tab="list"><span class="icon-s" data-icon="users"></span>档案管理</button>
+    <button class="nav-tab" data-tab="archive"><span class="icon-s" data-icon="upload"></span>病历上传</button>
+    <button class="nav-tab" data-tab="dec"><span class="icon-s" data-icon="sparkles"></span>AI 护理建议</button>
+    <button class="nav-tab" data-tab="hist"><span class="icon-s" data-icon="history"></span>操作记录</button>
+  </div>
+  <a class="btn btn-primary btn-sm" href="/nurse"><span class="icon-s" data-icon="stethoscope"></span>进入护工端</a>
+</nav>
+
+<!-- ═════════ HERO ═════════ -->
+<section class="hero">
+  <div class="hero-inner">
+    <div>
+      <span class="hero-kicker"><span class="icon-s" data-icon="shield" style="width:12px;height:12px"></span>本地离线运行 · 数据不出院</span>
+      <h1 class="hero-title">智护银伴<br>让老人护理<em>更有依据</em></h1>
+      <p class="hero-sub">结合老人的档案、病历和过往护理记录，自动给出可落地的护理建议。每条建议都能看到来源，之前怎么处理、效果如何，下次会继续参考。</p>
+      <div class="hero-actions">
+        <button class="btn btn-primary" onclick="switchTab('dec')"><span class="icon-s" data-icon="sparkles"></span>写一次护理建议</button>
+        <button class="btn btn-outline" onclick="switchTab('list')"><span class="icon-s" data-icon="users"></span>查看老人档案</button>
+      </div>
+    </div>
+    <div class="glass hero-panel">
+      <div class="hero-panel-title label"><span class="icon-s" data-icon="layers"></span>系统概览</div>
+      <div class="stat-grid">
+        <div class="stat"><div class="stat-num" id="statTotal">0</div><div class="stat-lbl">老人档案</div></div>
+        <div class="stat"><div class="stat-num" id="statDec">0</div><div class="stat-lbl">今日 AI 建议</div></div>
+        <div class="stat"><div class="stat-num" id="statTime">—</div><div class="stat-lbl">响应时间</div></div>
+      </div>
+      <div class="hero-lead">
+        <div class="label" style="color:var(--accent-ink)">AI 会记住历史决策</div>
+        <div class="body-s">最近 7 天对类似症状给出过的建议和效果，下次会自动参考，避免重复判断。</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═════════ MAIN ═════════ -->
+<main class="main container">
+
+  <!-- 录入 -->
+  <section id="tab-add" class="glass card">
+    <div class="card-head">
+      <div class="card-head-icon"><span class="icon" data-icon="plus"></span></div>
+      <div class="card-head-text"><h2>录入老人档案</h2><p>填写完整信息，用于后续护理和 AI 建议参考</p></div>
+    </div>
+    <div class="section-label">基本信息</div>
+    <div class="form-grid cols-3">
+      <label class="field-group"><span class="field-label">编号<span class="req">*</span></span><input id="patient_id" class="field" placeholder="P001"></label>
+      <label class="field-group"><span class="field-label">姓名<span class="req">*</span></span><input id="name" class="field" placeholder="张三"></label>
+      <label class="field-group"><span class="field-label">年龄</span><input id="age" class="field" type="number" placeholder="78"></label>
+      <label class="field-group"><span class="field-label">性别</span><select id="gender" class="field"><option value="">请选择</option><option>男</option><option>女</option><option>其他</option></select></label>
+      <label class="field-group"><span class="field-label">出生日期</span><input id="birth_date" class="field" type="date"></label>
+      <label class="field-group"><span class="field-label">身份证号</span><input id="id_card" class="field" placeholder="可选"></label>
+    </div>
+    <div class="section-label">体征信息</div>
+    <div class="form-grid cols-3">
+      <label class="field-group"><span class="field-label">血型</span><select id="blood_type" class="field"><option value="">—</option><option>A</option><option>B</option><option>AB</option><option>O</option></select></label>
+      <label class="field-group"><span class="field-label">身高（cm）</span><input id="height_cm" class="field" type="number" placeholder="168"></label>
+      <label class="field-group"><span class="field-label">体重（kg）</span><input id="weight_kg" class="field" type="number" placeholder="65"></label>
+    </div>
+    <div class="section-label">护理信息</div>
+    <div class="form-grid cols-4">
+      <label class="field-group"><span class="field-label">护理级别</span><select id="care_level" class="field"><option value="">—</option><option>特级</option><option>一级</option><option>二级</option><option>三级</option></select></label>
+      <label class="field-group"><span class="field-label">床位号</span><input id="bed_number" class="field" placeholder="301-A"></label>
+      <label class="field-group"><span class="field-label">主管护士</span><input id="primary_nurse" class="field" placeholder="王护士"></label>
+      <label class="field-group"><span class="field-label">入院日期</span><input id="admission_date" class="field" type="date"></label>
+    </div>
+    <div class="section-label">紧急联系</div>
+    <div class="form-grid cols-3">
+      <label class="field-group"><span class="field-label">联系人</span><input id="emergency_contact" class="field" placeholder="张小明"></label>
+      <label class="field-group"><span class="field-label">联系电话</span><input id="emergency_phone" class="field" type="tel" placeholder="138xxxx"></label>
+      <label class="field-group"><span class="field-label">关系</span><input id="emergency_relation" class="field" placeholder="子女"></label>
+    </div>
+    <div class="section-label">病史与备注</div>
+    <div class="form-grid cols-2">
+      <label class="field-group"><span class="field-label">过敏史</span><input id="allergy" class="field" placeholder="青霉素"></label>
+      <label class="field-group"><span class="field-label">饮食禁忌</span><input id="diet_restriction" class="field" placeholder="低盐低糖"></label>
+      <label class="field-group full"><span class="field-label">既往病史</span><textarea id="medical_history" class="field" rows="3" placeholder="高血压、糖尿病、冠心病 …"></textarea></label>
+      <label class="field-group full"><span class="field-label">备注</span><textarea id="notes" class="field" rows="2" placeholder="其他需要注意的事项"></textarea></label>
+    </div>
+    <div class="form-footer">
+      <button class="btn btn-ghost" onclick="switchTab('list')">取消</button>
+      <button class="btn btn-primary" id="submitBtn" onclick="submitPatient()"><span class="icon-s" data-icon="check"></span><span id="submitTxt">保存档案</span></button>
+    </div>
+  </section>
+
+  <!-- 档案列表 -->
+  <section id="tab-list" class="glass card" style="display:none;">
+    <div class="card-head">
+      <div class="card-head-icon"><span class="icon" data-icon="users"></span></div>
+      <div class="card-head-text"><h2>档案管理</h2><p>查看、编辑、删除老人档案</p></div>
+    </div>
+    <div style="position:relative; margin-bottom: var(--sp-4);">
+      <span class="icon-s" data-icon="search" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--ink-4);pointer-events:none"></span>
+      <input id="searchInput" class="field" placeholder="搜索姓名、编号、床位…" style="padding-left:36px" oninput="filterRecords(this.value)">
+    </div>
+    <div id="recordList"><div class="empty"><span class="empty-icon" data-icon="users"></span><div class="empty-title">暂无档案</div><div class="empty-sub">请先录入老人档案</div></div></div>
+  </section>
+
+  <!-- 病历上传 -->
+  <section id="tab-archive" class="glass card" style="display:none;">
+    <div class="card-head">
+      <div class="card-head-icon"><span class="icon" data-icon="upload"></span></div>
+      <div class="card-head-text"><h2>病历上传</h2><p>上传门诊、住院等病历照片，系统会自动识别文字并归入该老人档案</p></div>
+    </div>
+    <div class="form-grid cols-1">
+      <label class="field-group"><span class="field-label">选择老人</span><select id="archivePatient" class="field" onchange="syncArchivePatient()"><option value="">— 请选择已建档老人 —</option></select></label>
+    </div>
+    <div class="form-grid cols-3" style="margin-top:var(--sp-4);">
+      <label class="field-group"><span class="field-label">编号<span class="req">*</span></span><input id="archive_patient_id" class="field" placeholder="P001"></label>
+      <label class="field-group"><span class="field-label">姓名</span><input id="archive_name" class="field" placeholder="自动带入"></label>
+      <label class="field-group"><span class="field-label">病历类型</span><select id="record_type" class="field"><option>门诊病历</option><option>住院记录</option><option>出院小结</option><option>检查报告</option><option>检验报告</option><option>用药清单</option><option>其他病历</option></select></label>
+    </div>
+    <div class="upload-drop" style="margin-top:var(--sp-4);">
+      <span class="icon-l" data-icon="image" style="color:var(--ink-4);display:inline-block"></span>
+      <div class="title-s" style="margin-top:var(--sp-2)">病历照片<span class="req">*</span></div>
+      <div class="field-hint">支持 JPG / PNG / WEBP / BMP / TIFF，可一次上传多张</div>
+      <input id="record_files" type="file" accept="image/*" multiple style="margin-top:var(--sp-3)">
+    </div>
+    <div class="form-grid cols-1" style="margin-top:var(--sp-4);">
+      <label class="field-group"><span class="field-label">手动补充文字（可选）</span><textarea id="manual_text" class="field" rows="3" placeholder="如果照片不清、文字识别不准，可以在这里手动补录关键信息（诊断、用药、检查结果）"></textarea></label>
+      <label class="field-group"><span class="field-label">备注</span><textarea id="record_notes" class="field" rows="2" placeholder="例如：2026-04-26 门诊，家属提供照片"></textarea></label>
+    </div>
+    <div style="margin-top:var(--sp-5); display:flex; justify-content:flex-end;">
+      <button class="btn btn-primary" id="uploadBtn" onclick="uploadMedicalRecords()"><span class="icon-s" data-icon="upload"></span><span id="uploadTxt">上传并识别文字</span></button>
+    </div>
+    <div class="section-label">已上传病历</div>
+    <div id="recordArchiveList"><div class="empty"><span class="empty-icon" data-icon="file"></span><div class="empty-title">请先选择老人</div><div class="empty-sub">选择后会显示该老人已上传的病历照片</div></div></div>
+  </section>
+
+  <!-- AI 护理建议 -->
+  <section id="tab-dec" class="glass card" style="display:none;">
+    <div class="card-head">
+      <div class="card-head-icon"><span class="icon" data-icon="sparkles"></span></div>
+      <div class="card-head-text"><h2>AI 护理建议</h2><p>AI 会结合这位老人的档案、病历和过往护理记录给出建议，并标注每条建议来自哪一份材料</p></div>
+    </div>
+    <div class="decision-grid">
+      <div class="decision-main">
+        <label class="field-group">
+          <span class="field-label">选择老人</span>
+          <select id="decisionPatient" class="field"><option value="">— 请选择 —</option></select>
+        </label>
+        <div class="quick-chips">
+          <button class="tap-chip" onclick="addSymptom('发热')"><span class="icon-s" data-icon="thermometer"></span>发热</button>
+          <button class="tap-chip" onclick="addSymptom('咳嗽')">咳嗽</button>
+          <button class="tap-chip" onclick="addSymptom('头晕')">头晕</button>
+          <button class="tap-chip" onclick="addSymptom('胸闷')"><span class="icon-s" data-icon="heart"></span>胸闷</button>
+          <button class="tap-chip" onclick="addSymptom('腹痛')">腹痛</button>
+          <button class="tap-chip" onclick="addSymptom('血压偏高')"><span class="icon-s" data-icon="activity"></span>血压偏高</button>
+          <button class="tap-chip" onclick="addSymptom('血糖异常')"><span class="icon-s" data-icon="droplet"></span>血糖异常</button>
+          <button class="tap-chip" onclick="addSymptom('跌倒')"><span class="icon-s" data-icon="alert"></span>跌倒</button>
+        </div>
+        <textarea id="symptomInput" class="field" rows="3" placeholder="描述老人目前的症状或护理需求…"></textarea>
+        <div>
+          <button class="btn btn-primary" id="decisionBtn" onclick="submitDecision()"><span class="icon-s" data-icon="sparkles"></span><span id="decisionTxt">获取 AI 护理建议</span></button>
+        </div>
+        <div class="advice-card" id="adviceWrap" style="display:none;">
+          <div class="label"><span class="icon-s" data-icon="brain"></span>AI 护理建议</div>
+          <div id="adviceContent" class="advice-text"></div>
+        </div>
+        <div class="disclaimer" id="adviceDisclaimer" style="display:none;">
+          <span class="icon-s" data-icon="alert"></span>
+          <span>AI 生成内容仅供参考。持续不适或出现严重症状，请立即联系医生或启动急救流程。</span>
+        </div>
+      </div>
+      <div id="evidencePanel"></div>
+    </div>
+  </section>
+
+  <!-- 操作记录 -->
+  <section id="tab-hist" class="glass card" style="display:none;">
+    <div class="card-head">
+      <div class="card-head-icon"><span class="icon" data-icon="history"></span></div>
+      <div class="card-head-text"><h2>操作记录</h2><p>最近 50 条本机操作</p></div>
+    </div>
+    <div style="display:flex; justify-content:flex-end; margin-bottom: var(--sp-3);">
+      <button class="btn btn-ghost btn-sm" onclick="clearHistory()"><span class="icon-s" data-icon="trash"></span>清空</button>
+    </div>
+    <div id="historyList" class="hist-list"><div class="empty"><span class="empty-icon" data-icon="history"></span><div class="empty-title">暂无操作记录</div></div></div>
+  </section>
+
+</main>
+
+<!-- PWA banner -->
+<div id="pwaBanner" class="pwa-banner">
+  <span class="icon-s" data-icon="sparkles"></span>
+  <span class="body-s" style="color:#fff">添加到主屏幕，像 App 一样使用</span>
+  <button class="btn btn-primary btn-sm" id="pwaBtn">安装</button>
+  <button class="btn btn-ghost btn-sm" onclick="document.getElementById('pwaBanner').classList.remove('show')" style="color:#fff"><span class="icon-s" data-icon="close"></span></button>
+</div>
+
+</div><!-- /page -->
+
+<script>
+/* ═══════════ STATE ═══════════ */
+let curTab = 'add';
+let allPts = [];
+let histLog = [];
+let decCount = 0;
+let currentEvidencePanel = null;
+
+const toast = (m, t='info') => (window.ZhToast||{show:()=>{}}).show(m, t);
+const esc = v => String(v==null?'':v).replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+const gv = id => (document.getElementById(id)?.value || '').trim() || null;
+const nv = id => { const v = parseFloat(document.getElementById(id)?.value); return isNaN(v) ? null : v; };
+
+/* ═══════════ TABS ═══════════ */
+function switchTab(tab){
+  document.querySelectorAll('.nav-tab').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
+  ['add','list','archive','dec','hist'].forEach(t=>{
+    const el = document.getElementById('tab-'+t);
+    if(el) el.style.display = (t===tab ? 'block' : 'none');
+  });
+  curTab = tab;
+  if(tab==='list') loadPatients();
+  else if(tab==='dec') loadPatients().then(populateSel);
+  else if(tab==='archive') loadPatients().then(()=>{ populateArchiveSel(); loadMedicalRecordsForSelected(); });
+}
+document.addEventListener('DOMContentLoaded', ()=>{
+  document.querySelectorAll('.nav-tab').forEach(b=>{
+    b.addEventListener('click', ()=>switchTab(b.dataset.tab));
+  });
+  const ep = document.getElementById('evidencePanel');
+  if(ep && window.EvidencePanel){
+    currentEvidencePanel = new EvidencePanel(ep, { scope: 'admin-decision' });
+    currentEvidencePanel.render([], []);
+    currentEvidencePanel.onOutcomeRecord(async (decisionId, status, note)=>{
+      const r = await fetch(`/api/nursing/decisions/${encodeURIComponent(decisionId)}/outcome`, {
+        method: 'PATCH', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({outcome_status: status, note, recorded_by:'管理端'})
+      });
+      if(!r.ok) throw new Error((await r.json()).detail || '回填失败');
+      const pid = document.getElementById('decisionPatient').value;
+      if(pid) await refreshMemory(pid);
+    });
+  }
+  loadPatients();
+});
+
+/* ═══════════ 录入 ═══════════ */
+async function submitPatient(){
+  const pid = gv('patient_id'), name = gv('name');
+  if(!pid || !name){ toast('编号和姓名为必填项','warning'); return; }
+  const btn = document.getElementById('submitBtn'), txt = document.getElementById('submitTxt');
+  btn.disabled = true; txt.innerHTML = '<span class="ring"></span> 保存中…';
+  const data = {
+    patient_id: pid, name,
+    age: nv('age'), gender: gv('gender'), birth_date: gv('birth_date'), id_card: gv('id_card'),
+    blood_type: gv('blood_type'), height_cm: nv('height_cm'), weight_kg: nv('weight_kg'),
+    care_level: gv('care_level'), bed_number: gv('bed_number'), primary_nurse: gv('primary_nurse'),
+    admission_date: gv('admission_date'),
+    emergency_contact: gv('emergency_contact'), emergency_phone: gv('emergency_phone'), emergency_relation: gv('emergency_relation'),
+    medical_history: gv('medical_history'), allergy: gv('allergy'), diet_restriction: gv('diet_restriction'),
+    notes: gv('notes'),
+  };
+  try{
+    const r = await fetch('/api/ehr/patients', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data)});
+    if(!r.ok) throw new Error((await r.json()).detail || '保存失败');
+    toast('档案保存成功','success');
+    ['patient_id','name','age','birth_date','id_card','admission_date','emergency_contact','emergency_phone','emergency_relation','height_cm','weight_kg','medical_history','allergy','diet_restriction','notes'].forEach(k=>{ const e=document.getElementById(k); if(e) e.value=''; });
+    ['gender','blood_type','care_level'].forEach(k=>{ const e=document.getElementById(k); if(e) e.value=''; });
+    document.getElementById('statTotal').textContent = (parseInt(document.getElementById('statTotal').textContent)||0)+1;
+    addHist('add', `录入档案：${name}（${pid}）`);
+  }catch(e){ toast(e.message,'error'); }
+  finally{ btn.disabled=false; txt.textContent='保存档案'; }
+}
+
+/* ═══════════ 档案列表 ═══════════ */
+async function loadPatients(){
+  const list = document.getElementById('recordList');
+  if(list && curTab==='list') list.innerHTML = '<div class="empty"><div class="skel" style="height:60px;margin-bottom:8px"></div><div class="skel" style="height:60px;margin-bottom:8px"></div><div class="skel" style="height:60px"></div></div>';
+  try{
+    const r = await fetch('/api/ehr/patients');
+    const raw = await r.json();
+    const data = Array.isArray(raw) ? raw : (raw.records || []);
+    allPts = data;
+    document.getElementById('statTotal').textContent = data.length;
+    if(list) renderRecs(data);
+    populateSel();
+    populateArchiveSel();
+    return data;
+  }catch(e){
+    if(list) list.innerHTML = '<div class="empty"><span class="empty-icon" data-icon="alert"></span><div class="empty-title">加载失败</div></div>';
+    if(window.ZhIcons) window.ZhIcons.mount(list);
+    return [];
+  }
+}
+function initialOf(p){ return (p.name||'?').slice(0,1); }
+function careChipClass(lv){ return ({'特级':'chip-red','一级':'chip-amber','二级':'chip-blue','三级':'chip-green'}[lv]) || 'chip'; }
+function renderRecs(list){
+  const el = document.getElementById('recordList');
+  if(!list.length){ el.innerHTML = '<div class="empty"><span class="empty-icon" data-icon="users"></span><div class="empty-title">暂无档案</div></div>'; if(window.ZhIcons) window.ZhIcons.mount(el); return; }
+  el.innerHTML = '<div class="patient-list">' + list.map(p => `
+    <div class="patient-row">
+      <div class="patient-avatar">${esc(initialOf(p))}</div>
+      <div class="patient-info">
+        <div class="patient-name">${esc(p.name)}</div>
+        <div class="patient-meta">${esc(p.patient_id)} · ${esc(p.age||'?')}岁 · ${esc(p.bed_number||'—')}</div>
+      </div>
+      <div class="patient-tags">
+        ${p.care_level ? `<span class="chip ${careChipClass(p.care_level)}">${esc(p.care_level)}护理</span>` : ''}
+        ${p.allergy ? `<span class="chip chip-red">过敏：${esc(p.allergy)}</span>` : ''}
+        ${p.diet_restriction ? `<span class="chip chip-amber">${esc(p.diet_restriction)}</span>` : ''}
+      </div>
+      <div class="patient-actions">
+        <button class="btn btn-ghost btn-icon" title="编辑" onclick="openEdit('${esc(p.patient_id)}')"><span class="icon-s" data-icon="edit"></span></button>
+        <button class="btn btn-ghost btn-icon" title="删除" onclick="delPt('${esc(p.patient_id)}','${esc(p.name)}')"><span class="icon-s" data-icon="trash"></span></button>
+      </div>
+    </div>`).join('') + '</div>';
+  if(window.ZhIcons) window.ZhIcons.mount(el);
+}
+function filterRecords(q){
+  if(!q){ renderRecs(allPts); return; }
+  const kw = q.toLowerCase();
+  renderRecs(allPts.filter(p=>(p.name||'').toLowerCase().includes(kw) || (p.patient_id||'').toLowerCase().includes(kw) || (p.bed_number||'').toLowerCase().includes(kw)));
+}
+async function delPt(pid, name){
+  const ok = await window.ZhDialog.confirm({ title:`删除 ${name}？`, text:'此操作不可撤销，该老人的全部档案、病历照片、识别文字和护理记录都会被删除。', confirmText:'确认删除', danger: true });
+  if(!ok) return;
+  try{
+    const r = await fetch(`/api/ehr/patients/${encodeURIComponent(pid)}`, {method:'DELETE'});
+    if(!r.ok) throw new Error('删除失败');
+    toast(`已删除 ${name}`,'success');
+    addHist('delete', `删除档案：${name}（${pid}）`);
+    loadPatients();
+  }catch(e){ toast(e.message, 'error'); }
+}
+
+/* ═══════════ 编辑 ═══════════ */
+async function openEdit(pid){
+  try{
+    const r = await fetch(`/api/ehr/patients/${encodeURIComponent(pid)}`);
+    const p = await r.json();
+    const vals = await window.ZhDialog.prompt({
+      title: `编辑：${p.name || pid}`, confirmText:'保存',
+      fields: [
+        { id:'name', label:'姓名', value:p.name||'' },
+        { id:'age', label:'年龄', value:p.age||'' },
+        { id:'care_level', label:'护理级别', value:p.care_level||'' },
+        { id:'bed_number', label:'床位号', value:p.bed_number||'' },
+        { id:'allergy', label:'过敏史', value:p.allergy||'' },
+        { id:'medical_history', label:'既往病史', value:p.medical_history||'' },
+      ]
+    });
+    if(!vals) return;
+    const payload = {};
+    Object.keys(vals).forEach(k=>{ if(vals[k] !== '') payload[k] = vals[k]; });
+    if(payload.age !== undefined) payload.age = parseInt(payload.age) || null;
+    const r2 = await fetch(`/api/ehr/patients/${encodeURIComponent(pid)}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+    if(!r2.ok) throw new Error('保存失败');
+    toast('修改已保存','success');
+    addHist('edit', `编辑档案：${vals.name||pid}`);
+    loadPatients();
+  }catch(e){ toast(e.message,'error'); }
+}
+
+/* ═══════════ 病历上传 ═══════════ */
+function populateArchiveSel(){
+  const s = document.getElementById('archivePatient');
+  if(!s) return;
+  const cur = s.value;
+  s.innerHTML = '<option value="">— 请选择已建档老人 —</option>' + allPts.map(p=>`<option value="${esc(p.patient_id)}">${esc(p.name)}（${esc(p.patient_id)}）</option>`).join('');
+  if(cur) s.value = cur;
+}
+function syncArchivePatient(){
+  const pid = document.getElementById('archivePatient')?.value || '';
+  const p = allPts.find(x=>x.patient_id===pid);
+  if(p){
+    document.getElementById('archive_patient_id').value = p.patient_id || '';
+    document.getElementById('archive_name').value = p.name || '';
+    loadMedicalRecords(p.patient_id);
+  }
+}
+function loadMedicalRecordsForSelected(){
+  const pid = document.getElementById('archive_patient_id')?.value?.trim() || document.getElementById('archivePatient')?.value || '';
+  if(pid) loadMedicalRecords(pid);
+}
+async function uploadMedicalRecords(){
+  const pid = document.getElementById('archive_patient_id').value.trim();
+  const name = document.getElementById('archive_name').value.trim();
+  const files = document.getElementById('record_files').files;
+  if(!pid){ toast('编号不能为空','warning'); return; }
+  if(!files.length){ toast('请先选择病历照片','warning'); return; }
+  const fd = new FormData();
+  fd.append('patient_id', pid);
+  if(name) fd.append('name', name);
+  fd.append('record_type', document.getElementById('record_type').value || '病历');
+  fd.append('notes', document.getElementById('record_notes').value || '');
+  fd.append('manual_text', document.getElementById('manual_text').value || '');
+  Array.from(files).forEach(f=>fd.append('files', f));
+  const btn = document.getElementById('uploadBtn'), txt = document.getElementById('uploadTxt');
+  btn.disabled = true; txt.innerHTML = '<span class="ring"></span> 上传并识别中…';
+  try{
+    const r = await fetch('/api/ehr/records/upload', {method:'POST', body: fd});
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.detail || '上传失败');
+    const warn = (d.records||[]).some(x=>x.ocr_status !== 'ocr_success');
+    toast(warn ? '照片已保存；部分文字未识别，可手动补充' : '病历和文字识别结果已保存','success');
+    document.getElementById('record_files').value = '';
+    document.getElementById('manual_text').value = '';
+    document.getElementById('record_notes').value = '';
+    addHist('add', `上传病历：${name||pid}（${(d.records||[]).length} 张）`);
+    await loadMedicalRecords(pid);
+  }catch(e){ toast(e.message,'error'); }
+  finally{ btn.disabled=false; txt.textContent='上传并识别文字'; }
+}
+async function loadMedicalRecords(pid){
+  const box = document.getElementById('recordArchiveList');
+  if(!box || !pid) return;
+  box.innerHTML = '<div class="empty"><div class="skel" style="height:180px"></div></div>';
+  try{
+    const r = await fetch(`/api/ehr/records/${encodeURIComponent(pid)}`);
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.detail || '读取失败');
+    renderMedicalRecords(d.records || [], pid);
+  }catch(e){
+    box.innerHTML = `<div class="empty"><span class="empty-icon" data-icon="alert"></span><div class="empty-title">${esc(e.message)}</div></div>`;
+    if(window.ZhIcons) window.ZhIcons.mount(box);
+  }
+}
+function renderMedicalRecords(records, pid){
+  const box = document.getElementById('recordArchiveList');
+  if(!records.length){
+    box.innerHTML = '<div class="empty"><span class="empty-icon" data-icon="file"></span><div class="empty-title">该老人暂无病历照片</div></div>';
+    if(window.ZhIcons) window.ZhIcons.mount(box); return;
+  }
+  box.innerHTML = '<div class="record-grid">' + records.map(r=>{
+    const ok = r.ocr_status === 'ocr_success';
+    const txt = (r.ocr_text || r.manual_text || '未识别到文字。').slice(0,360);
+    return `<div class="record-card">
+      <img class="record-img" src="${esc(r.file_url)}" alt="病历照片" loading="lazy">
+      <div class="record-body">
+        <div class="record-title">${esc(r.record_type||'病历')}</div>
+        <div class="meta">${esc(r.uploaded_at||'')} · 识别引擎：${esc(r.ocr_engine||'无')}</div>
+        <span class="chip ${ok?'chip-green':'chip-amber'}">${ok?'已识别':'待校对'}</span>
+        <div class="ocr-box">${esc(txt)}</div>
+        <div style="display:flex; gap:6px; margin-top:auto; padding-top:6px;">
+          <a class="btn btn-outline btn-sm" href="${esc(r.file_url)}" target="_blank" style="flex:1"><span class="icon-s" data-icon="image"></span>查看原图</a>
+          <button class="btn btn-ghost btn-sm" onclick="deleteMedicalRecord('${esc(r.doc_id)}','${esc(pid)}')"><span class="icon-s" data-icon="trash"></span></button>
+        </div>
+      </div>
+    </div>`;
+  }).join('') + '</div>';
+  if(window.ZhIcons) window.ZhIcons.mount(box);
+}
+async function deleteMedicalRecord(docId, pid){
+  const ok = await window.ZhDialog.confirm({ title:'删除这份病历？', text:'原图、识别文字和 AI 记忆都会一并删除', confirmText:'确认删除', danger: true });
+  if(!ok) return;
+  try{
+    const r = await fetch(`/api/ehr/records/${encodeURIComponent(docId)}`, {method:'DELETE'});
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.detail || '删除失败');
+    toast('病历已删除','success');
+    loadMedicalRecords(pid);
+  }catch(e){ toast(e.message,'error'); }
+}
+
+/* ═══════════ AI 护理建议 ═══════════ */
+function populateSel(){
+  const s = document.getElementById('decisionPatient');
+  s.innerHTML = '<option value="">— 请选择 —</option>' + allPts.map(p=>`<option value="${esc(p.patient_id)}">${esc(p.name)}（${esc(p.patient_id)}）</option>`).join('');
+  s.onchange = () => {
+    if(s.value) refreshMemory(s.value);
+    else if(currentEvidencePanel) currentEvidencePanel.render([], []);
+  };
+}
+function addSymptom(s){
+  const ta = document.getElementById('symptomInput');
+  ta.value = (ta.value ? ta.value+'\n' : '') + s;
+  ta.focus();
+}
+async function refreshMemory(pid){
+  try{
+    const r = await fetch(`/api/nursing/decisions?patient_id=${encodeURIComponent(pid)}&limit=5&days=30`);
+    if(!r.ok) return;
+    const d = await r.json();
+    const prev = currentEvidencePanel?.evidence || [];
+    currentEvidencePanel?.render(prev, d.decisions || []);
+  }catch{}
+}
+let currentDecisionId = null;
+async function submitDecision(){
+  const pid = document.getElementById('decisionPatient').value;
+  const symptom = document.getElementById('symptomInput').value.trim();
+  if(!pid || !symptom){ toast('请选择老人并填写症状','warning'); return; }
+  const btn = document.getElementById('decisionBtn'), txt = document.getElementById('decisionTxt');
+  btn.disabled = true; txt.innerHTML = '<span class="ring"></span> AI 分析中…';
+  const t0 = Date.now();
+  try{
+    await streamDecision(pid, symptom);
+    const elapsed = ((Date.now()-t0)/1000).toFixed(1) + 's';
+    document.getElementById('statTime').textContent = elapsed;
+    decCount++; document.getElementById('statDec').textContent = decCount;
+    addHist('decision', `AI 建议：${allPts.find(p=>p.patient_id===pid)?.name||pid} — ${symptom.slice(0,20)}`);
+    await refreshMemory(pid);
+  }catch(e){
+    try{ await fallbackDecision(pid, symptom); }
+    catch(e2){ toast('AI 暂时不可用，请确认本地模型服务已启动','error'); }
+  }finally{ btn.disabled=false; txt.textContent='获取 AI 护理建议'; }
+}
+
+async function streamDecision(pid, symptom){
+  const res = await fetch('/api/nursing/decision/stream', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({patient_id: pid, symptom, n_results: 5})
+  });
+  if(!res.ok) throw new Error('stream failed');
+  const reader = res.body.getReader(), dec = new TextDecoder();
+  const wrap = document.getElementById('adviceWrap');
+  const disc = document.getElementById('adviceDisclaimer');
+  const adv  = document.getElementById('adviceContent');
+  wrap.style.display = 'block'; disc.style.display = 'flex';
+  adv.innerHTML = ''; adv.appendChild(document.createElement('span')).className = 'advice-cursor';
+  let buf = '', curEv = '', linkifyScheduled = false;
+  let scheduleLinkify = () => {
+    if(linkifyScheduled) return;
+    linkifyScheduled = true;
+    setTimeout(()=>{ linkifyScheduled = false; if(currentEvidencePanel) currentEvidencePanel.linkifyContainer(adv); }, 60);
+  };
+  while(true){
+    const {done, value} = await reader.read(); if(done) break;
+    buf += dec.decode(value, {stream:true});
+    const lines = buf.split('\n'); buf = lines.pop();
+    for(const line of lines){
+      if(line.startsWith('event:')) curEv = line.slice(6).trim();
+      else if(line.startsWith('data:')){
+        const raw = line.slice(5).trim();
+        if(raw === '[DONE]'){ adv.querySelector('.advice-cursor')?.remove(); if(currentEvidencePanel) currentEvidencePanel.linkifyContainer(adv); continue; }
+        try{
+          const d = JSON.parse(raw);
+          if(curEv === 'context'){
+            /* legacy, ignore */
+          }else if(curEv === 'evidence'){
+            if(currentEvidencePanel) currentEvidencePanel.render(d.evidence||[], d.memory||[]);
+          }else if(curEv === 'token'){
+            const cur = adv.querySelector('.advice-cursor');
+            const t = document.createTextNode(typeof d==='string'?d:JSON.stringify(d));
+            if(cur) adv.insertBefore(t, cur); else adv.appendChild(t);
+            scheduleLinkify();
+          }else if(curEv === 'done'){
+            if(d && d.decision_id) currentDecisionId = d.decision_id;
+            adv.querySelector('.advice-cursor')?.remove();
+            if(currentEvidencePanel) currentEvidencePanel.linkifyContainer(adv);
+          }else if(curEv === 'error'){ throw new Error(d); }
+        }catch(e){ if(curEv === 'error') throw e; }
+      }
+    }
+  }
+}
+async function fallbackDecision(pid, symptom){
+  const res = await fetch('/api/nursing/decision', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({patient_id:pid, symptom, n_results:5})});
+  if(!res.ok) throw new Error('请求失败');
+  const d = await res.json();
+  document.getElementById('adviceWrap').style.display = 'block';
+  document.getElementById('adviceDisclaimer').style.display = 'flex';
+  const adv = document.getElementById('adviceContent');
+  adv.textContent = d.llm_advice || JSON.stringify(d);
+  if(d.decision_id) currentDecisionId = d.decision_id;
+  if(currentEvidencePanel){
+    currentEvidencePanel.render(d.evidence || [], d.memory || []);
+    currentEvidencePanel.linkifyContainer(adv);
+  }
+}
+
+/* ═══════════ 操作记录 ═══════════ */
+const histIcon = { add:'plus', delete:'trash', edit:'edit', decision:'sparkles' };
+function addHist(type, text){
+  histLog.unshift({ type, text, time: new Date().toLocaleTimeString('zh-CN',{hour:'2-digit', minute:'2-digit'}) });
+  if(histLog.length>50) histLog.pop();
+  renderHist();
+}
+function renderHist(){
+  const el = document.getElementById('historyList');
+  if(!histLog.length){ el.innerHTML = '<div class="empty"><span class="empty-icon" data-icon="history"></span><div class="empty-title">暂无操作记录</div></div>'; if(window.ZhIcons) window.ZhIcons.mount(el); return; }
+  el.innerHTML = histLog.map(h=>`
+    <div class="hist-row">
+      <span class="hist-dot"></span>
+      <span class="body-s"><span class="icon-s" data-icon="${histIcon[h.type]||'info'}" style="vertical-align:-3px;color:var(--accent)"></span> ${esc(h.text)}</span>
+      <span class="meta">${esc(h.time)}</span>
+    </div>`).join('');
+  if(window.ZhIcons) window.ZhIcons.mount(el);
+}
+function clearHistory(){ histLog = []; renderHist(); toast('操作记录已清空','info'); }
+
+/* ═══════════ PWA ═══════════ */
+if('serviceWorker' in navigator){ navigator.serviceWorker.register('/static/sw.js').catch(()=>{}); }
+let deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', e=>{ e.preventDefault(); deferredPrompt = e; document.getElementById('pwaBanner').classList.add('show'); });
+document.getElementById('pwaBtn')?.addEventListener('click', async ()=>{
+  if(!deferredPrompt) return;
+  deferredPrompt.prompt();
+  await deferredPrompt.userChoice;
+  deferredPrompt = null;
+  document.getElementById('pwaBanner').classList.remove('show');
+});
+</script>
+</body>
+</html>

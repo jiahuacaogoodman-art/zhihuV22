@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Local data & cache (must NOT be committed)
+local_ehr_db/
+local_ehr_uploads/
+*.sqlite3
+*.db
+
+# IDE
+.vscode/
+.idea/
+.DS_Store
+
+# Logs
+*.log
+nohup.out
+
+# Model weights (download at runtime)
+models/
+weights/
+*.onnx
+*.gguf
+
+# OS
+Thumbs.db
+ehthumbs.db
+Desktop.ini

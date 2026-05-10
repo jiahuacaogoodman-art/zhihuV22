@@ -1,0 +1,238 @@
+/* === Glass 原件 · 液态玻璃 ==================================================
+   彩色光源背景 + 浮动光斑 + 渐变 rim + 顶部 specular + 底部内阴影
+   ========================================================================== */
+
+/* ── 背景：ambient svg + 动态 mesh ──────────────────── */
+body{
+  background-color: var(--page-bg);
+  color: var(--ink-2);
+  font-family: var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* 主背景：ambient 彩图 */
+body::before{
+  content:"";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -2;
+  background-image: url("/static/design/ambient.svg");
+  background-size: cover;
+  background-position: center;
+}
+
+/* 浮动彩色光斑：两个柔和 blob 缓慢漂浮 */
+body::after{
+  content:"";
+  position: fixed;
+  inset: -10%;
+  pointer-events: none;
+  z-index: -1;
+  background:
+    radial-gradient(420px 420px at 12% 18%, rgba(94,234,212,0.40), transparent 60%),
+    radial-gradient(520px 520px at 88% 32%, rgba(129,140,248,0.32), transparent 60%),
+    radial-gradient(460px 460px at 72% 82%, rgba(249,168,212,0.26), transparent 60%),
+    radial-gradient(420px 420px at 22% 78%, rgba(56,189,248,0.30), transparent 60%);
+  filter: blur(6px);
+  animation: ambient-drift 22s ease-in-out infinite alternate;
+}
+@keyframes ambient-drift{
+  0%   { transform: translate3d(0, 0, 0) rotate(0deg); }
+  50%  { transform: translate3d(-3%, 2%, 0) rotate(2deg); }
+  100% { transform: translate3d(3%, -2%, 0) rotate(-2deg); }
+}
+
+/* 主要内容层 */
+.page{ position: relative; z-index: 1; }
+
+/* ── Glass L1：深色玻璃（nav）──────────────────────── */
+.glass-l1{
+  position: relative;
+  background: var(--glass-dark-bg);
+  color: #E2E8F0;
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border-bottom: 1px solid var(--glass-dark-border);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.14),
+    inset 0 -1px 0 var(--glass-dark-stroke),
+    0 20px 40px rgba(15,23,42,0.10);
+}
+.glass-l1::before{
+  content:"";
+  position: absolute; inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(94,234,212,0.08) 0%, transparent 40%);
+}
+
+/* ── Glass L2：液态玻璃卡片 · 光影增强版 ─────────────
+   层次结构（从底到顶）：
+     · backdrop-filter 高模糊高饱和
+     · 带粉色/薄荷色的双层投影（向外浮起）
+     · conic 彩色环形 rim（会变化的边，像水面反光）
+     · 底部薄荷色色泄（光穿透后的折射余晖）
+     · 左上拐角亮斑（light-catch）
+     · 顶部斜向光泽条（白色 sheen）
+   ---------------------------------------------------- */
+.glass{
+  position: relative;
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  border-radius: var(--r-l);
+  border: 1px solid transparent;
+  background-clip: padding-box;
+  overflow: hidden;
+  isolation: isolate;
+  /* 外层：双色彩色投影 + 传统深色投影 */
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.70) inset,          /* 紧贴玻璃的内缘高光 */
+    0 1px 0 rgba(255,255,255,0.95) inset,            /* 顶部 1px specular */
+    0 -1px 0 rgba(15,23,42,0.06) inset,              /* 底部 1px 暗线 */
+    0 18px 48px -12px rgba(20,184,166,0.28),         /* 薄荷色远投影 */
+    0 28px 60px -20px rgba(129,140,248,0.22),        /* 淡紫远投影 */
+    0 6px 14px -4px rgba(15,23,42,0.10),             /* 近景中性投影 */
+    0 1px 2px rgba(15,23,42,0.04);
+}
+
+/* 彩色 conic rim：360° 色散边 */
+.glass::before{
+  content:"";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  padding: 1.25px;
+  background: conic-gradient(
+    from 210deg,
+    rgba(94,234,212,0.85),   /* 薄荷 */
+    rgba(255,255,255,0.95),  /* 白色高光 */
+    rgba(129,140,248,0.70),  /* 淡紫 */
+    rgba(249,168,212,0.55),  /* 粉 */
+    rgba(94,234,212,0.85)    /* 闭环 */
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  opacity: 0.90;
+  z-index: 2;
+  animation: glass-rim-rotate 16s linear infinite;
+}
+@keyframes glass-rim-rotate{
+  to{ --_r: 360deg; filter: hue-rotate(10deg); }
+}
+
+/* 内容夹层（伪元素放置的光影都绝对定位在卡片内） */
+.glass > *{ position: relative; z-index: 1; }
+
+/* 光影层：顶部 sheen + 左上 light-catch + 底部色泄 */
+.glass::after{
+  content:"";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  z-index: 0;
+  background:
+    /* 左上拐角亮斑（斜射进玻璃的那束光） */
+    radial-gradient(
+      180px 140px at 14% 10%,
+      rgba(255,255,255,0.85) 0%,
+      rgba(255,255,255,0.28) 30%,
+      transparent 60%
+    ),
+    /* 顶部斜向 sheen：从左上到中间，慢慢淡 */
+    linear-gradient(
+      172deg,
+      rgba(255,255,255,0.55) 0%,
+      rgba(255,255,255,0.12) 22%,
+      transparent 42%
+    ),
+    /* 底部色泄：薄荷色从下往上渗 */
+    linear-gradient(
+      0deg,
+      rgba(94,234,212,0.22) 0%,
+      rgba(94,234,212,0.06) 16%,
+      transparent 40%
+    );
+  mix-blend-mode: screen;
+}
+
+/* 实色玻璃：模糊太重时的替代 */
+.glass-solid{
+  position: relative;
+  background: var(--glass-bg-solid);
+  backdrop-filter: blur(14px) saturate(150%);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
+  border: 1px solid rgba(255,255,255,0.85);
+  border-radius: var(--r-l);
+  box-shadow:
+    inset 0 1px 0 var(--glass-specular),
+    inset 0 -1px 0 var(--glass-stroke),
+    var(--shadow-2);
+}
+
+/* 实色玻璃：模糊太重时的替代 */
+.glass-solid{
+  position: relative;
+  background: var(--glass-bg-solid);
+  backdrop-filter: blur(14px) saturate(150%);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
+  border: 1px solid rgba(255,255,255,0.85);
+  border-radius: var(--r-l);
+  box-shadow:
+    inset 0 1px 0 var(--glass-specular),
+    inset 0 -1px 0 var(--glass-stroke),
+    var(--shadow-2);
+}
+
+/* 悬浮：轻轻飘一下 */
+.glass-hover{ transition: transform var(--dur-base) var(--ease), box-shadow var(--dur-base) var(--ease); }
+.glass-hover:hover{
+  transform: translateY(-3px);
+  box-shadow:
+    inset 0 1px 0 var(--glass-specular),
+    inset 0 -1px 0 var(--glass-stroke),
+    var(--shadow-4);
+}
+
+.glass-divider{
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(15,23,42,0.10), transparent);
+  margin: var(--sp-4) 0;
+  border: none;
+}
+
+/* ── 装饰性浮动玻璃球（页面背景里的 orb）──────────── */
+.orb{
+  position: fixed;
+  border-radius: 50%;
+  pointer-events: none;
+  filter: blur(60px);
+  opacity: 0.50;
+  z-index: -1;  /* 在 ambient 彩图上面，在页面内容下面 */
+  animation: orb-float 14s ease-in-out infinite alternate;
+}
+.orb-1{ width: 420px; height: 420px;
+        background: radial-gradient(circle at 30% 30%, #5EEAD4, #14B8A6 55%, transparent 72%); }
+.orb-2{ width: 340px; height: 340px;
+        background: radial-gradient(circle at 70% 30%, #C4B5FD, #818CF8 55%, transparent 72%);
+        animation-delay: -5s; animation-duration: 18s; }
+.orb-3{ width: 280px; height: 280px;
+        background: radial-gradient(circle at 50% 50%, #FBCFE8, #F9A8D4 55%, transparent 72%);
+        opacity: 0.32; animation-delay: -8s; animation-duration: 20s; }
+
+@keyframes orb-float{
+  0%   { transform: translate3d(0, 0, 0) scale(1); }
+  50%  { transform: translate3d(30px, -20px, 0) scale(1.08); }
+  100% { transform: translate3d(-20px, 30px, 0) scale(0.95); }
+}
+
+/* reduced motion: 关闭漂浮 */
+@media (prefers-reduced-motion: reduce){
+  body::after, .orb{ animation: none !important; }
+}

@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>智护银伴 · 护工端</title>
+<link rel="manifest" href="/static/manifest.json">
+<meta name="theme-color" content="#0EA5A4">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Serif+SC:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="/static/design/tokens.css">
+<link rel="stylesheet" href="/static/design/glass.css">
+<link rel="stylesheet" href="/static/design/ui.css">
+<script defer src="/static/design/icons.js"></script>
+<script defer src="/static/design/dialog.js"></script>
+<script defer src="/static/design/evidence.js"></script>
+<style>
+html, body{ height: 100%; overflow: hidden; }
+body{ display: flex; flex-direction: column; }
+
+.nav{
+  position: relative;
+  display: flex; align-items: center; gap: var(--sp-4);
+  padding: 0 var(--sp-5); height: 60px; flex-shrink: 0; z-index: 10;
+}
+.nav-brand{ display: flex; align-items: center; gap: var(--sp-2); color: #fff; font-family: var(--font-display); font-weight: 600; font-size: 17px; }
+.nav-brand .mark{ width: 32px; height: 32px; border-radius: var(--r-s); background: linear-gradient(135deg, var(--accent), var(--accent-ink)); display: inline-flex; align-items: center; justify-content: center; color: #fff; }
+.nav-brand .sub{ font: 500 12px/1 var(--font-ui); color: rgba(226,232,240,0.65); margin-left: 6px; letter-spacing: 0.05em; }
+.nav-title{ flex: 1; text-align: center; font: 500 var(--fz-md)/1 var(--font-ui); color: rgba(226,232,240,0.85); }
+
+.body-wrap{ flex: 1; display: flex; overflow: hidden; position: relative; z-index: 1; }
+
+/* ─── 左侧老人列表 ─── */
+.panel-list{
+  width: 320px; flex-shrink: 0;
+  background: rgba(255,255,255,0.55);
+  backdrop-filter: blur(18px) saturate(160%);
+  border-right: 1px solid rgba(15,23,42,0.06);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.pl-head{ padding: var(--sp-4); border-bottom: 1px solid rgba(15,23,42,0.06); }
+.pl-head .label{ margin-bottom: var(--sp-3); display: flex; align-items: center; gap: 6px; color: var(--ink-3); }
+.search-box{ position: relative; }
+.search-box .icon-s{ position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--ink-4); pointer-events: none; }
+.search-box input{ padding-left: 32px; }
+.pl-body{ flex: 1; overflow-y: auto; padding: var(--sp-2); }
+
+.pt-item{
+  display: grid; grid-template-columns: 36px 1fr auto; gap: var(--sp-2);
+  align-items: center;
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-s);
+  cursor: pointer;
+  background: rgba(255,255,255,0.70);
+  border: 1px solid rgba(15,23,42,0.05);
+  margin-bottom: 4px;
+  transition: border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
+}
+.pt-item:hover{ border-color: rgba(14,165,164,0.3); background: #fff; }
+.pt-item.active{ border-color: var(--accent); background: rgba(14,165,164,0.08); box-shadow: 0 0 0 2px rgba(14,165,164,0.15); }
+.pt-avatar{ width: 36px; height: 36px; border-radius: 50%; background: rgba(14,165,164,0.12); color: var(--accent-ink); display: flex; align-items: center; justify-content: center; font: 600 14px/1 var(--font-display); }
+.pt-name{ font: 600 var(--fz-sm)/1.3 var(--font-ui); color: var(--ink-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pt-sub { font: 400 var(--fz-xs)/1.4 var(--font-ui); color: var(--ink-3); margin-top: 2px; }
+
+/* ─── 右侧详情 ─── */
+.panel-detail{ flex: 1; overflow-y: auto; padding: var(--sp-5); display: flex; flex-direction: column; }
+.detail-empty{ flex: 1; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: var(--sp-3); color: var(--ink-4); }
+.detail-empty-ico{ width: 72px; height: 72px; border-radius: 50%; background: rgba(14,165,164,0.08); display: flex; align-items: center; justify-content: center; color: var(--accent); }
+
+.detail-grid{ display: grid; grid-template-columns: 1fr 340px; gap: var(--sp-4); }
+.detail-main{ display: flex; flex-direction: column; gap: var(--sp-4); }
+
+.patient-head{ padding: var(--sp-4); display: flex; align-items: center; gap: var(--sp-3); }
+.patient-head .avatar{ width: 56px; height: 56px; border-radius: 50%; background: rgba(14,165,164,0.10); color: var(--accent-ink); display: flex; align-items: center; justify-content: center; font: 600 22px/1 var(--font-display); }
+.patient-head h2{ font-family: var(--font-display); font-weight: 600; font-size: 24px; color: var(--ink-1); letter-spacing: -0.01em; line-height: 1.15; }
+.patient-head .meta{ margin-top: 4px; color: var(--ink-3); }
+.patient-tags{ display: flex; gap: 6px; margin-top: var(--sp-2); flex-wrap: wrap; }
+
+.info-grid{ display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--sp-2); }
+.info-item{ padding: var(--sp-2) var(--sp-3); border-radius: var(--r-s); background: rgba(255,255,255,0.75); border: 1px solid rgba(15,23,42,0.05); }
+.info-item.full{ grid-column: 1/-1; }
+.info-label{ font: 600 var(--fz-xs)/1.4 var(--font-ui); color: var(--ink-4); letter-spacing: 0.04em; text-transform: uppercase; }
+.info-value{ font: 500 var(--fz-sm)/1.5 var(--font-ui); color: var(--ink-1); margin-top: 2px; }
+
+.collapse{ padding: 0; }
+.collapse-head{ padding: var(--sp-3) var(--sp-4); display: flex; align-items: center; justify-content: space-between; cursor: pointer; user-select: none; }
+.collapse-head:hover{ background: rgba(15,23,42,0.03); }
+.collapse-head-left{ display: flex; align-items: center; gap: var(--sp-2); }
+.collapse-body{ max-height: 0; overflow: hidden; transition: max-height var(--dur-base) var(--ease); }
+.collapse-body.open{ max-height: 600px; }
+.collapse-inner{ padding: 0 var(--sp-4) var(--sp-4); }
+.collapse-arrow{ transition: transform var(--dur-base) var(--ease); color: var(--ink-4); }
+.collapse-arrow.open{ transform: rotate(180deg); }
+
+.symptom-card{ padding: var(--sp-4); display: flex; flex-direction: column; gap: var(--sp-3); }
+.symptom-card .quick{ display: flex; flex-wrap: wrap; gap: 6px; }
+
+.action-row{ display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-2); }
+.action-row .btn{ height: 44px; font-size: var(--fz-md); }
+
+/* 任务卡 */
+.task-card{ display: none; overflow: hidden; }
+.task-card.show{ display: block; }
+.task-head{ padding: var(--sp-4); color: #fff; position: relative; }
+.task-risk-label{ font: 700 var(--fz-xs)/1 var(--font-ui); letter-spacing: 0.08em; }
+.task-event-title{ font: 600 var(--fz-xl)/1.3 var(--font-display); margin-top: 6px; letter-spacing: -0.01em; }
+.task-sub{ margin-top: 6px; opacity: 0.85; font: 400 var(--fz-xs)/1.5 var(--font-ui); }
+.task-body{ padding: var(--sp-4); display: flex; flex-direction: column; gap: var(--sp-3); }
+.task-box{ padding: var(--sp-3); border-radius: var(--r-s); background: rgba(255,255,255,0.85); border: 1px solid rgba(15,23,42,0.05); }
+.task-box .title-s{ display: flex; align-items: center; gap: 6px; margin-bottom: var(--sp-2); }
+
+.progress{ height: 8px; background: rgba(15,23,42,0.08); border-radius: 999px; overflow: hidden; }
+.progress-bar{ height: 100%; background: linear-gradient(90deg, var(--accent), var(--green)); transition: width var(--dur-base) var(--ease); width: 0; }
+
+.care-task{ display: flex; gap: var(--sp-2); padding: var(--sp-2) 0; border-bottom: 1px dashed rgba(15,23,42,0.06); align-items: flex-start; }
+.care-task:last-child{ border-bottom: none; }
+.task-check{
+  width: 24px; height: 24px; border-radius: 6px; flex-shrink: 0;
+  border: 1.5px solid var(--ink-5); background: #fff;
+  display: flex; align-items: center; justify-content: center;
+  color: transparent; transition: all var(--dur-fast) var(--ease);
+}
+.task-check.done{ background: var(--green); border-color: var(--green); color: #fff; }
+.task-check.abnormal{ background: var(--amber); border-color: var(--amber); color: #fff; }
+.task-check.skipped{ background: var(--ink-4); border-color: var(--ink-4); color: #fff; }
+.task-text{ flex: 1; font: 500 var(--fz-sm)/1.5 var(--font-ui); color: var(--ink-1); }
+.task-text.done{ text-decoration: line-through; color: var(--ink-4); }
+.task-text.abnormal{ color: var(--amber); }
+.task-text.skipped{ color: var(--ink-4); }
+.task-meta-line{ font: 400 var(--fz-xs)/1.4 var(--font-ui); color: var(--ink-4); margin-top: 3px; }
+.priority-high  { color: var(--red); font-weight: 600; }
+.priority-medium{ color: var(--amber); font-weight: 600; }
+.priority-low   { color: var(--green); font-weight: 600; }
+.task-exec-actions{ display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+.task-exec-actions .btn{ height: 28px; padding: 0 10px; font-size: var(--fz-xs); }
+
+.cond-item, .forbid-item, .recheck-item{ padding: var(--sp-2) var(--sp-3); border-radius: var(--r-s); background: #fff; border: 1px solid rgba(15,23,42,0.06); margin-bottom: 6px; font: 400 var(--fz-xs)/1.6 var(--font-ui); color: var(--ink-2); }
+.forbid-item{ border-color: rgba(220,38,38,0.2); background: rgba(220,38,38,0.04); color: var(--red); }
+.recheck-row{ display: flex; justify-content: space-between; align-items: center; gap: var(--sp-2); }
+
+.evidence-item{ padding: var(--sp-2) var(--sp-3); border-radius: var(--r-s); background: #fff; border: 1px solid rgba(15,23,42,0.06); margin-bottom: 6px; font: 400 var(--fz-xs)/1.6 var(--font-ui); color: var(--ink-2); }
+.evidence-item b{ color: var(--accent-ink); margin-right: 4px; }
+
+.sbar-grid{ display: grid; grid-template-columns: 28px 1fr; gap: var(--sp-2); font: 400 var(--fz-xs)/1.6 var(--font-ui); }
+.sbar-k{ width: 28px; height: 24px; border-radius: 6px; background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: center; font: 700 12px/1 var(--font-mono); }
+.sbar-v{ color: var(--ink-2); }
+
+.log-item{ border-left: 2px solid var(--accent-soft); padding: 6px 0 6px 10px; font: 400 var(--fz-xs)/1.5 var(--font-ui); color: var(--ink-3); margin-bottom: 4px; }
+.log-item b{ display: block; color: var(--ink-1); font-weight: 600; }
+
+.boundary{ padding: var(--sp-2) var(--sp-4); font: 400 var(--fz-xs)/1.5 var(--font-ui); color: var(--amber); background: rgba(217,119,6,0.06); border-top: 1px solid rgba(217,119,6,0.12); display: flex; gap: 6px; align-items: flex-start; }
+
+/* AI 流式结果 */
+.ai-card{ display: none; padding: var(--sp-4); }
+.ai-card.show{ display: block; }
+.ai-text{ font: 400 var(--fz-md)/1.8 var(--font-ui); color: var(--ink-1); white-space: pre-wrap; }
+.advice-cursor{ display: inline-block; width: 2px; height: 1em; background: var(--accent); vertical-align: -2px; animation: advice-blink 0.9s infinite; }
+@keyframes advice-blink{ 0%,100%{opacity:1} 50%{opacity:0} }
+
+/* 底部 tab（手机） */
+.bottom-nav{
+  display: none; flex-shrink: 0;
+  height: calc(56px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  background: rgba(11,18,32,0.88);
+  backdrop-filter: blur(14px);
+  border-top: 1px solid rgba(255,255,255,0.08);
+  align-items: flex-start; padding-top: 6px;
+}
+.bn-item{ flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; color: rgba(226,232,240,0.65); font: 500 var(--fz-xs)/1 var(--font-ui); background: transparent; border: none; cursor: pointer; }
+.bn-item.active{ color: #fff; }
+.bn-item.active .bn-mark{ background: var(--accent-soft); }
+.bn-mark{ width: 20px; height: 3px; border-radius: 2px; background: transparent; margin-top: 6px; }
+
+@media (max-width: 900px){
+  .detail-grid{ grid-template-columns: 1fr; }
+  .panel-list{ width: 100%; }
+  .panel-list.hide-mobile,
+  .panel-detail.hide-mobile{ display: none; }
+  .bottom-nav{ display: flex; }
+}
+@media (min-width: 901px){
+  .bottom-nav{ display: none !important; }
+}
+</style>
+</head>
+<body>
+<!-- 装饰性浮动玻璃球 -->
+<div class="orb orb-1" style="position:fixed;top:-80px;right:-120px"></div>
+<div class="orb orb-2" style="position:fixed;bottom:-60px;left:-80px"></div>
+
+<!-- ══════════ NAV ══════════ -->
+<nav class="nav glass-l1">
+  <a class="nav-brand" href="/nurse">
+    <span class="mark"><span class="icon-s" data-icon="heart"></span></span>
+    <span>智护银伴</span>
+    <span class="sub">护工端</span>
+  </a>
+  <div class="nav-title" id="navTitle">请选择老人开始工作</div>
+  <a class="btn btn-primary btn-sm" href="/"><span class="icon-s" data-icon="settings"></span>管理端</a>
+</nav>
+
+<div class="body-wrap">
+  <!-- 左：老人列表 -->
+  <aside class="panel-list" id="panelList">
+    <div class="pl-head">
+      <div class="label"><span class="icon-s" data-icon="users"></span>老人列表</div>
+      <div class="search-box">
+        <span class="icon-s" data-icon="search"></span>
+        <input id="ptSearch" class="field" placeholder="搜索姓名 / 编号" oninput="filterPts(this.value)">
+      </div>
+    </div>
+    <div class="pl-body" id="ptList">
+      <div style="padding: 12px;">
+        <div class="skel" style="height:52px;margin-bottom:6px"></div>
+        <div class="skel" style="height:52px;margin-bottom:6px"></div>
+        <div class="skel" style="height:52px"></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- 右：详情 -->
+  <main class="panel-detail" id="panelDetail">
+    <div id="detailEmpty" class="detail-empty">
+      <div class="detail-empty-ico"><span class="icon-l" data-icon="user"></span></div>
+      <div class="title-m">请从左侧选择老人</div>
+      <div class="body-s">选择后可以查看档案、生成护理任务卡、记录执行情况和交接</div>
+    </div>
+    <div id="detailContent" style="display:none"></div>
+  </main>
+</div>
+
+<nav class="bottom-nav" id="bottomNav">
+  <button class="bn-item active" id="bnList" onclick="mobileTab('list')"><span class="icon" data-icon="users"></span><span>老人</span><span class="bn-mark"></span></button>
+  <button class="bn-item" id="bnDetail" onclick="mobileTab('detail')"><span class="icon" data-icon="file"></span><span>详情</span><span class="bn-mark"></span></button>
+</nav>
+
+<script>
+/* ═══════════ STATE ═══════════ */
+let allPts = [];
+let curPt = null;
+const esc = v => String(v==null?'':v).replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+const toast = (m, t='info') => (window.ZhToast||{show:()=>{}}).show(m, t);
+
+/* ═══════════ 老人列表 ═══════════ */
+async function loadPts(){
+  try{
+    const r = await fetch('/api/ehr/patients');
+    const raw = await r.json();
+    allPts = Array.isArray(raw) ? raw : (raw.records || []);
+    renderPtList(allPts);
+  }catch(e){
+    document.getElementById('ptList').innerHTML = '<div class="empty"><span class="empty-icon" data-icon="alert"></span><div class="empty-title">加载失败</div></div>';
+    if(window.ZhIcons) window.ZhIcons.mount(document.getElementById('ptList'));
+  }
+}
+function renderPtList(list){
+  const html = list.length ? list.map(p=>`
+    <div class="pt-item${curPt?.patient_id===p.patient_id?' active':''}" onclick="selectPt('${esc(p.patient_id)}')">
+      <div class="pt-avatar">${esc((p.name||'?').slice(0,1))}</div>
+      <div style="min-width:0">
+        <div class="pt-name">${esc(p.name)}</div>
+        <div class="pt-sub">${esc(p.patient_id)} · ${esc(p.age||'?')}岁 · ${esc(p.bed_number||'—')}</div>
+      </div>
+      ${p.care_level ? `<span class="chip chip-accent" style="font-size:10px">${esc(p.care_level)}</span>` : ''}
+    </div>
+  `).join('') : '<div class="empty"><span class="empty-icon" data-icon="users"></span><div class="empty-title">暂无老人</div></div>';
+  const el = document.getElementById('ptList');
+  el.innerHTML = html;
+  if(window.ZhIcons) window.ZhIcons.mount(el);
+}
+function filterPts(q){
+  const kw = (q||'').toLowerCase();
+  renderPtList(q ? allPts.filter(p=>(p.name||'').toLowerCase().includes(kw) || (p.patient_id||'').toLowerCase().includes(kw)) : allPts);
+}
+
+/* ═══════════ 选择老人 ═══════════ */
+function selectPt(pid){
+  curPt = allPts.find(p=>p.patient_id===pid);
+  if(!curPt) return;
+  renderPtList(allPts);
+  document.getElementById('detailEmpty').style.display = 'none';
+  const dc = document.getElementById('detailContent');
+  dc.style.display = 'flex'; dc.style.flexDirection = 'column'; dc.style.gap = 'var(--sp-4)';
+  dc.innerHTML = buildDetail(curPt);
+  document.getElementById('navTitle').textContent = curPt.name;
+  if(window.ZhIcons) window.ZhIcons.mount(dc);
+  initCollapses();
+  initEvidencePanel(curPt.patient_id);
+  mobileTab('detail');
+}
+
+function buildDetail(p){
+  return `
+  <div class="glass patient-head">
+    <div class="avatar">${esc((p.name||'?').slice(0,1))}</div>
+    <div>
+      <h2>${esc(p.name)}</h2>
+      <div class="meta body-s">${esc(p.patient_id)} · ${esc(p.age||'?')}岁 · ${esc(p.gender||'—')} · ${esc(p.bed_number||'—')}床</div>
+      <div class="patient-tags">
+        ${p.care_level ? `<span class="chip chip-accent">${esc(p.care_level)}护理</span>` : ''}
+        ${p.allergy ? `<span class="chip chip-red">过敏：${esc(p.allergy)}</span>` : ''}
+        ${p.diet_restriction ? `<span class="chip chip-amber">${esc(p.diet_restriction)}</span>` : ''}
+      </div>
+    </div>
+  </div>
+
+  <div class="detail-grid">
+    <div class="detail-main">
+      <div class="glass collapse">
+        <div class="collapse-head">
+          <div class="collapse-head-left"><span class="icon-s" data-icon="file"></span><span class="title-s">档案信息</span></div>
+          <span class="icon-s collapse-arrow" data-icon="chevron-down"></span>
+        </div>
+        <div class="collapse-body">
+          <div class="collapse-inner">
+            <div class="info-grid">
+              <div class="info-item"><div class="info-label">血型</div><div class="info-value">${esc(p.blood_type||'—')}</div></div>
+              <div class="info-item"><div class="info-label">身高/体重</div><div class="info-value">${esc(p.height_cm||'—')}cm / ${esc(p.weight_kg||'—')}kg</div></div>
+              <div class="info-item"><div class="info-label">主管护士</div><div class="info-value">${esc(p.primary_nurse||'—')}</div></div>
+              <div class="info-item"><div class="info-label">紧急联系</div><div class="info-value">${esc(p.emergency_contact||'—')}${p.emergency_phone?' · '+esc(p.emergency_phone):''}</div></div>
+              <div class="info-item full"><div class="info-label">既往病史</div><div class="info-value">${esc(p.medical_history||'暂无记录')}</div></div>
+              ${p.notes ? `<div class="info-item full"><div class="info-label">备注</div><div class="info-value">${esc(p.notes)}</div></div>` : ''}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="glass symptom-card">
+        <div class="title-s"><span class="icon-s" data-icon="stethoscope" style="vertical-align:-3px;color:var(--accent)"></span> 描述情况并生成护理任务卡</div>
+        <div class="quick">
+          <button class="tap-chip" onclick="addSym('发热')"><span class="icon-s" data-icon="thermometer"></span>发热</button>
+          <button class="tap-chip" onclick="addSym('咳嗽')">咳嗽</button>
+          <button class="tap-chip" onclick="addSym('头晕')">头晕</button>
+          <button class="tap-chip" onclick="addSym('胸闷')"><span class="icon-s" data-icon="heart"></span>胸闷</button>
+          <button class="tap-chip" onclick="addSym('腹痛')">腹痛</button>
+          <button class="tap-chip" onclick="addSym('血压偏高')"><span class="icon-s" data-icon="activity"></span>血压</button>
+          <button class="tap-chip" onclick="addSym('血糖异常')"><span class="icon-s" data-icon="droplet"></span>血糖</button>
+          <button class="tap-chip" onclick="addSym('跌倒')"><span class="icon-s" data-icon="alert"></span>跌倒</button>
+          <button class="tap-chip" onclick="addSym('意识异常')">意识异常</button>
+        </div>
+        <textarea id="symInput_${esc(p.patient_id)}" class="field" rows="3" placeholder="描述老人目前的症状或护理需求，可以点击上方标签快速填入…"></textarea>
+        <div class="action-row">
+          <button class="btn btn-primary" id="taskBtn_${esc(p.patient_id)}" onclick="getTaskCard('${esc(p.patient_id)}')">
+            <span class="icon-s" data-icon="zap"></span>
+            <span id="taskTxt_${esc(p.patient_id)}">生成护理任务卡</span>
+          </button>
+          <button class="btn btn-outline" id="aiBtn_${esc(p.patient_id)}" onclick="getAI('${esc(p.patient_id)}')">
+            <span class="icon-s" data-icon="sparkles"></span>
+            <span id="aiTxt_${esc(p.patient_id)}">快速问 AI</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="glass task-card" id="taskCard_${esc(p.patient_id)}"></div>
+
+      <div class="glass ai-card" id="aiCard_${esc(p.patient_id)}">
+        <div class="title-s" style="margin-bottom: var(--sp-2); display:flex; align-items:center; gap:6px;"><span class="icon-s" data-icon="brain" style="color:var(--accent)"></span>AI 护理建议</div>
+        <div id="aiText_${esc(p.patient_id)}" class="ai-text"></div>
+        <div class="disclaimer" style="margin-top:var(--sp-3); padding: 8px 12px; border-radius: var(--r-s); background: rgba(217,119,6,0.08); color: var(--amber); font-size: var(--fz-xs);">
+          <span class="icon-s" data-icon="alert"></span>
+          <span>AI 生成内容仅供参考。遇到严重症状请立即联系医生。</span>
+        </div>
+      </div>
+    </div>
+
+    <aside>
+      <div id="evidencePanel_${esc(p.patient_id)}"></div>
+    </aside>
+  </div>`;
+}
+
+function initCollapses(){
+  document.querySelectorAll('.collapse-head').forEach(h=>{
+    if(h.dataset.bound) return; h.dataset.bound = '1';
+    h.onclick = () => {
+      const body = h.nextElementSibling;
+      const arr  = h.querySelector('.collapse-arrow');
+      const open = body.classList.toggle('open');
+      arr.classList.toggle('open', open);
+    };
+  });
+}
+
+/* ═══════════ 依据面板（按老人隔离） ═══════════ */
+const evidencePanels = {};
+async function initEvidencePanel(pid){
+  const el = document.getElementById(`evidencePanel_${pid}`);
+  if(!el || !window.EvidencePanel) return;
+  const panel = new EvidencePanel(el, { scope: 'nurse-'+pid });
+  evidencePanels[pid] = panel;
+  panel.onOutcomeRecord(async (did, status, note)=>{
+    const r = await fetch(`/api/nursing/decisions/${encodeURIComponent(did)}/outcome`, {
+      method:'PATCH', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({outcome_status: status, note, recorded_by:'护工端'})
+    });
+    if(!r.ok) throw new Error((await r.json()).detail || '回填失败');
+    await refreshMemoryPanel(pid);
+  });
+  await refreshMemoryPanel(pid);
+}
+async function refreshMemoryPanel(pid){
+  const panel = evidencePanels[pid];
+  if(!panel) return;
+  try{
+    const r = await fetch(`/api/nursing/decisions?patient_id=${encodeURIComponent(pid)}&limit=5&days=30`);
+    if(!r.ok) return;
+    const d = await r.json();
+    panel.render(panel.evidence, d.decisions || []);
+  }catch{}
+}
+
+/* ═══════════ 症状输入 ═══════════ */
+function addSym(s){
+  if(!curPt) return;
+  const ta = document.getElementById('symInput_'+curPt.patient_id);
+  if(ta) ta.value = (ta.value ? ta.value+'\n' : '') + s;
+}
+
+/* ═══════════ 快速问 AI（流式） ═══════════ */
+async function getAI(pid){
+  const ta = document.getElementById('symInput_'+pid);
+  const symptom = ta?.value?.trim();
+  if(!symptom){ toast('请先描述老人的情况','warning'); return; }
+  const btn = document.getElementById('aiBtn_'+pid), txt = document.getElementById('aiTxt_'+pid);
+  btn.disabled = true; txt.innerHTML = '<span class="ring"></span> AI 分析中…';
+  try{ await streamAI(pid, symptom); }
+  catch(e){
+    try{ await fallbackAI(pid, symptom); }
+    catch(e2){ toast('AI 暂时不可用','error'); }
+  }finally{ btn.disabled=false; txt.textContent='快速问 AI'; }
+}
+async function streamAI(pid, symptom){
+  const res = await fetch('/api/nursing/decision/stream', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({patient_id:pid, symptom, n_results:5})
+  });
+  if(!res.ok) throw new Error('stream failed');
+  const reader = res.body.getReader(), dec = new TextDecoder();
+  const card = document.getElementById('aiCard_'+pid);
+  const adv = document.getElementById('aiText_'+pid);
+  card.classList.add('show');
+  adv.innerHTML = '<span class="advice-cursor"></span>';
+  const panel = evidencePanels[pid];
+  let buf = '', curEv = '', linkifyScheduled = false;
+  const scheduleLinkify = () => {
+    if(linkifyScheduled) return;
+    linkifyScheduled = true;
+    setTimeout(()=>{ linkifyScheduled = false; if(panel) panel.linkifyContainer(adv); }, 60);
+  };
+  while(true){
+    const {done, value} = await reader.read(); if(done) break;
+    buf += dec.decode(value, {stream:true});
+    const lines = buf.split('\n'); buf = lines.pop();
+    for(const line of lines){
+      if(line.startsWith('event:')) curEv = line.slice(6).trim();
+      else if(line.startsWith('data:')){
+        const raw = line.slice(5).trim();
+        if(raw === '[DONE]'){ adv.querySelector('.advice-cursor')?.remove(); if(panel) panel.linkifyContainer(adv); continue; }
+        try{
+          const d = JSON.parse(raw);
+          if(curEv === 'evidence'){
+            if(panel) panel.render(d.evidence||[], d.memory||[]);
+          }else if(curEv === 'token'){
+            const cur = adv.querySelector('.advice-cursor');
+            const t = document.createTextNode(typeof d==='string'?d:JSON.stringify(d));
+            if(cur) adv.insertBefore(t, cur); else adv.appendChild(t);
+            scheduleLinkify();
+          }else if(curEv === 'done'){
+            adv.querySelector('.advice-cursor')?.remove();
+            if(panel) panel.linkifyContainer(adv);
+            await refreshMemoryPanel(pid);
+          }else if(curEv === 'error'){ throw new Error(d); }
+        }catch(e){ if(curEv === 'error') throw e; }
+      }
+    }
+  }
+}
+async function fallbackAI(pid, symptom){
+  const res = await fetch('/api/nursing/decision', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({patient_id:pid, symptom, n_results:5})});
+  if(!res.ok) throw new Error('请求失败');
+  const d = await res.json();
+  const card = document.getElementById('aiCard_'+pid);
+  const adv = document.getElementById('aiText_'+pid);
+  card.classList.add('show');
+  adv.textContent = d.llm_advice || '';
+  const panel = evidencePanels[pid];
+  if(panel){
+    panel.render(d.evidence || [], d.memory || []);
+    panel.linkifyContainer(adv);
+  }
+}
+
+/* ═══════════ 任务卡 ═══════════ */
+async function getTaskCard(pid){
+  const ta = document.getElementById('symInput_'+pid);
+  const symptom = ta?.value?.trim();
+  if(!symptom){ toast('请先描述老人的情况','warning'); return; }
+  const btn = document.getElementById('taskBtn_'+pid), txt = document.getElementById('taskTxt_'+pid);
+  btn.disabled = true; txt.innerHTML = '<span class="ring"></span> 正在生成任务卡…';
+  try{
+    const res = await fetch('/api/nursing/task-card', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({patient_id:pid, symptom, reporter:'护工端', location: curPt?.bed_number||'', n_results:3})
+    });
+    if(!res.ok) throw new Error(await res.text());
+    const d = await res.json();
+    renderTaskCard(pid, d.task_card);
+    await refreshMemoryPanel(pid);
+    toast('任务卡已生成','success');
+  }catch(e){
+    console.error(e);
+    toast('任务卡生成失败：请确认本地 AI 服务已启动','error');
+  }finally{
+    btn.disabled=false; txt.textContent='生成护理任务卡';
+  }
+}
+
+function riskClass(lv){ return { red:'risk-red', orange:'risk-orange', yellow:'risk-yellow', green:'risk-green' }[lv] || 'risk-yellow'; }
+function priorityText(p){ return ({high:'高优先', medium:'中优先', low:'低优先'})[p]||'中优先'; }
+function priorityCls(p){ return ({high:'priority-high', medium:'priority-medium', low:'priority-low'})[p]||'priority-medium'; }
+function taskStatusLabel(s){ return ({done:'已完成', abnormal:'异常', skipped:'跳过', pending:'待执行'})[s]||'待执行'; }
+function taskStatusMark(s){ return ({done:'✓', abnormal:'!', skipped:'−'})[s]||''; }
+function statusText(s){ return ({processing:'处理中', archived:'已归档', escalated:'异常升级'})[s] || (s||'处理中'); }
+
+function renderTaskCard(pid, card){
+  const el = document.getElementById('taskCard_'+pid);
+  if(!el) return;
+  el.dataset.eventId = card.event_id;
+  const progress = card.progress || { total:0, handled:0, percent:0 };
+  const advice = card.nursing_advice || {};
+
+  const tasks = (card.immediate_tasks||[]).map(t=>{
+    const st = t.status || 'pending';
+    const extra = t.value ? `<div class="task-meta-line">记录：${esc(t.value)}${esc(t.unit||'')}${t.note?'｜'+esc(t.note):''}${t.completed_at?' · '+esc(t.completed_at):''}</div>` : '';
+    return `<div class="care-task">
+      <div class="task-check ${st==='done'?'done':st==='abnormal'?'abnormal':st==='skipped'?'skipped':''}">${taskStatusMark(st)}</div>
+      <div style="flex:1">
+        <div class="task-text ${st==='done'?'done':st==='abnormal'?'abnormal':st==='skipped'?'skipped':''}">${esc(t.text)}</div>
+        <div class="task-meta-line"><span class="${priorityCls(t.priority)}">${priorityText(t.priority)}</span>${t.required?' · 必做':''} · ${taskStatusLabel(st)}</div>
+        ${extra}
+        <div class="task-exec-actions">
+          <button class="btn btn-primary" onclick="completeTask('${pid}','${card.event_id}','${t.task_id}','done',${t.input_required?'true':'false'},'${esc(t.input_required?.label||'数值')}','${esc(t.input_required?.unit||'')}')"><span class="icon-s" data-icon="check"></span>完成</button>
+          <button class="btn btn-outline" onclick="completeTask('${pid}','${card.event_id}','${t.task_id}','abnormal',${t.input_required?'true':'false'},'${esc(t.input_required?.label||'异常详情')}','${esc(t.input_required?.unit||'')}')"><span class="icon-s" data-icon="alert"></span>异常</button>
+          <button class="btn btn-ghost" onclick="completeTask('${pid}','${card.event_id}','${t.task_id}','skipped',false,'跳过原因','')">跳过</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  const evidence = (card.evidence||[]).map(e=>`<div class="evidence-item"><b>${esc(e.source)}：</b>${esc(e.content)}</div>`).join('');
+  const cond = (card.conditional_tasks||[]).map(c=>`<div class="cond-item"><b>${esc(c.condition)}</b>${(c.tasks||[]).map(x=>'<br>• '+esc(x)).join('')}</div>`).join('');
+  const forbid = (card.forbidden_actions||[]).map(x=>`<div class="forbid-item">${esc(x)}</div>`).join('');
+  const recheck = (card.recheck_plan||[]).map((r,i)=>`<div class="recheck-item"><div class="recheck-row"><span>${r.after_minutes}分钟后：${esc(r.text)}</span><button class="btn btn-outline btn-sm" id="timer_${card.event_id}_${i}" onclick="startRecheckTimer('${card.event_id}',${i},${r.after_minutes},'${esc(r.text)}')">启动</button></div></div>`).join('');
+  const sbar = card.handover_sbar || {};
+  const logs = (card.execution_logs||[]).slice().reverse().slice(0,6).map(l=>`<div class="log-item"><b>${esc(l.created_at||'')} · ${esc(l.title||'')}</b>${esc(l.operator||'')}：${esc(l.detail||'')}</div>`).join('');
+
+  el.classList.add('show');
+  el.innerHTML = `
+    <div class="task-head ${riskClass(card.risk_level)}">
+      <div class="task-risk-label">${esc(card.risk_label||'')} · ${esc(statusText(card.status))}</div>
+      <div class="task-event-title">${esc(card.event_type||'')}</div>
+      <div class="task-sub">${esc(card.patient_name||'')} · ${esc(card.bed_number||'—')}床 · ${esc(card.created_at||'')} · ${esc(card.reporter||'')}</div>
+    </div>
+    <div class="task-body">
+      <div class="task-box">
+        <div class="title-s"><span class="icon-s" data-icon="activity"></span>执行进度 ${progress.handled||0}/${progress.total||0}</div>
+        <div class="progress"><div class="progress-bar" style="width:${progress.percent||0}%"></div></div>
+      </div>
+
+      <div class="task-box">
+        <div class="title-s"><span class="icon-s" data-icon="info"></span>风险提示</div>
+        <div class="body-s">${esc(card.summary||'')}</div>
+      </div>
+
+      <div class="task-box">
+        <div class="title-s"><span class="icon-s" data-icon="sparkles"></span>护理建议</div>
+        <div class="body-s"><b>${esc(advice.title||'护理建议')}</b></div>
+        <div class="body-s" style="margin-top:4px">${esc(advice.summary||'请按下方任务逐项执行。')}</div>
+        ${advice.focus_points?.length ? '<ul style="margin:var(--sp-2) 0 0 18px">'+advice.focus_points.map(x=>'<li class="body-s">'+esc(x)+'</li>').join('')+'</ul>' : ''}
+        ${advice.handover_hint ? '<div class="meta" style="margin-top: var(--sp-2)">'+esc(advice.handover_hint)+'</div>' : ''}
+      </div>
+
+      <div class="task-box">
+        <div class="title-s"><span class="icon-s" data-icon="book"></span>判断依据</div>
+        ${evidence || '<div class="body-s" style="color:var(--ink-4)">暂无依据</div>'}
+      </div>
+
+      <div class="task-box">
+        <div class="title-s"><span class="icon-s" data-icon="check"></span>需要做的事</div>
+        ${tasks}
+      </div>
+
+      ${cond ? `<div class="task-box"><div class="title-s"><span class="icon-s" data-icon="filter"></span>特殊情况处理</div>${cond}</div>` : ''}
+      ${forbid ? `<div class="task-box"><div class="title-s"><span class="icon-s" data-icon="alert"></span>禁止事项</div>${forbid}</div>` : ''}
+      ${recheck ? `<div class="task-box"><div class="title-s"><span class="icon-s" data-icon="clock"></span>复测提醒</div>${recheck}</div>` : ''}
+
+      <div class="task-box">
+        <div class="title-s"><span class="icon-s" data-icon="chat"></span>交接单（SBAR）</div>
+        <div class="sbar-grid">
+          <div class="sbar-k">S</div><div class="sbar-v">${esc(sbar.S||'')}</div>
+          <div class="sbar-k">B</div><div class="sbar-v">${esc(sbar.B||'')}</div>
+          <div class="sbar-k">A</div><div class="sbar-v">${esc(sbar.A||'')}</div>
+          <div class="sbar-k">R</div><div class="sbar-v">${esc(sbar.R||'')}</div>
+        </div>
+        <div style="display:flex; gap:8px; margin-top:var(--sp-3);">
+          <button class="btn btn-outline btn-sm" onclick="copySBAR('${card.event_id}')"><span class="icon-s" data-icon="quote"></span>复制交接单</button>
+          <button class="btn btn-primary btn-sm" onclick="archiveEvent('${pid}','${card.event_id}')"><span class="icon-s" data-icon="bookmark"></span>一键归档</button>
+        </div>
+      </div>
+
+      ${logs ? `<div class="task-box"><div class="title-s"><span class="icon-s" data-icon="history"></span>执行记录</div>${logs}</div>` : ''}
+    </div>
+    <div class="boundary"><span class="icon-s" data-icon="shield"></span><span>${esc(card.safety_boundary||advice.safety_boundary||'本结果仅供护理参考，不替代医生诊断。')}</span></div>
+  `;
+  if(window.ZhIcons) window.ZhIcons.mount(el);
+  el.scrollIntoView({ behavior:'smooth', block:'start' });
+}
+
+async function completeTask(pid, eventId, taskId, status, inputRequired, label, unit){
+  const statusLabel = ({done:'完成', abnormal:'异常', skipped:'跳过'})[status] || '完成';
+  const fields = [];
+  if(inputRequired && status==='done'){
+    fields.push({ id:'val', label: `${label}${unit?`（${unit}）`:''}`, placeholder:'请输入' });
+  }
+  fields.push({ id:'note', label:'备注（可选）', placeholder: status==='abnormal'?'异常详情':'补充说明' });
+  const v = await window.ZhDialog.prompt({ title:`${statusLabel}该任务`, confirmText:'确认并入档', fields });
+  if(!v) return;
+  if(inputRequired && status==='done' && !(v.val||'').trim()){ toast('请填写数值','warning'); return; }
+  try{
+    const res = await fetch(`/api/nursing/events/${encodeURIComponent(eventId)}/tasks/${encodeURIComponent(taskId)}/complete`, {
+      method:'PATCH', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({status, value: v.val||'', note: v.note||'', unit, completed_by:'护工端'})
+    });
+    if(!res.ok) throw new Error('更新失败');
+    const d = await res.json();
+    renderTaskCard(pid, d.event);
+    toast('任务已入档','success');
+  }catch(e){ toast(e.message,'error'); }
+}
+
+function startRecheckTimer(eventId, idx, minutes, text){
+  const btn = document.getElementById(`timer_${eventId}_${idx}`);
+  if(!btn) return;
+  let sec = minutes * 60;
+  btn.disabled = true;
+  const tick = () => {
+    const m = Math.floor(sec/60), s = sec%60;
+    btn.innerHTML = `<span class="icon-s" data-icon="clock"></span>${m}:${String(s).padStart(2,'0')}`;
+    if(window.ZhIcons) window.ZhIcons.mount(btn);
+    if(sec-- <= 0){
+      clearInterval(timer);
+      btn.innerHTML = '<span class="icon-s" data-icon="check"></span>填写复测';
+      btn.disabled = false;
+      btn.onclick = () => addObservation(eventId, text);
+      if(window.ZhIcons) window.ZhIcons.mount(btn);
+      window.ZhDialog.alert({ title:'复测提醒', text:`请完成：${text}` });
+    }
+  };
+  tick();
+  const timer = setInterval(tick, 1000);
+}
+
+async function addObservation(eventId, type){
+  const v = await window.ZhDialog.prompt({
+    title:'填写复测结果', confirmText:'保存',
+    fields:[ { id:'val', label:'结果', placeholder:'例如：血糖 4.6' }, { id:'note', label:'备注（可选）' } ]
+  });
+  if(!v || !v.val) return;
+  const res = await fetch(`/api/nursing/events/${encodeURIComponent(eventId)}/observations`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({vital_type: type, value: v.val, note: v.note, recorded_by:'护工端'})
+  });
+  toast(res.ok ? '记录已保存' : '保存失败', res.ok ? 'success' : 'error');
+}
+
+async function copySBAR(eventId){
+  const res = await fetch(`/api/nursing/events/${encodeURIComponent(eventId)}/sbar`);
+  if(!res.ok){ toast('读取交接单失败','error'); return; }
+  const d = await res.json();
+  const s = d.handover_sbar || {};
+  const txt = `S：${s.S||''}\nB：${s.B||''}\nA：${s.A||''}\nR：${s.R||''}`;
+  try{ await navigator.clipboard.writeText(txt); toast('交接单已复制','success'); }
+  catch{ window.ZhDialog.alert({ title:'交接单', text: txt }); }
+}
+
+async function archiveEvent(pid, eventId){
+  const ok = await window.ZhDialog.confirm({ title:'归档这次护理？', text:'归档后仍可在记录中查看。', confirmText:'归档' });
+  if(!ok) return;
+  const res = await fetch(`/api/nursing/events/${encodeURIComponent(eventId)}/archive`, {method:'POST'});
+  if(!res.ok){ toast('归档失败','error'); return; }
+  const d = await res.json();
+  renderTaskCard(pid, d.event);
+  toast('已归档','success');
+}
+
+/* ═══════════ 手机底部切换 ═══════════ */
+function mobileTab(which){
+  const isMobile = window.matchMedia('(max-width: 900px)').matches;
+  if(!isMobile) return;
+  const list = document.getElementById('panelList');
+  const detail = document.getElementById('panelDetail');
+  const bnL = document.getElementById('bnList');
+  const bnD = document.getElementById('bnDetail');
+  if(which === 'list'){
+    list.classList.remove('hide-mobile'); detail.classList.add('hide-mobile');
+    bnL.classList.add('active'); bnD.classList.remove('active');
+    document.getElementById('navTitle').textContent = '请选择老人开始工作';
+  }else{
+    if(!curPt){ toast('请先选择老人','info'); return; }
+    list.classList.add('hide-mobile'); detail.classList.remove('hide-mobile');
+    bnL.classList.remove('active'); bnD.classList.add('active');
+    document.getElementById('navTitle').textContent = curPt.name;
+  }
+}
+
+/* ═══════════ PWA ═══════════ */
+if('serviceWorker' in navigator) navigator.serviceWorker.register('/static/sw.js').catch(()=>{});
+
+loadPts();
+</script>
+</body>
+</html>

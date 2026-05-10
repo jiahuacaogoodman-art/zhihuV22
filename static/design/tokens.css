@@ -1,0 +1,110 @@
+/* === 智护银伴 · 设计系统 tokens ============================================
+   液态玻璃 · 清新薄荷调 · 渐变光感
+   ========================================================================== */
+:root{
+  /* ── 主色：薄荷青 + 互补色 ─────────────────────────────── */
+  --accent:          #14B8A6;   /* 薄荷青（比原来更亮一点） */
+  --accent-soft:     #99F6E4;   /* 薄荷浅 */
+  --accent-ink:      #0F766E;   /* 深海青（按下/文字） */
+  --accent-glow:     #5EEAD4;   /* 高光 */
+
+  --accent-2:        #818CF8;   /* 淡紫（副调） */
+  --accent-3:        #38BDF8;   /* 天青（副调） */
+  --accent-4:        #F9A8D4;   /* 蜜桃粉（副调） */
+
+  /* 主按钮渐变 */
+  --gradient-accent: linear-gradient(135deg, #2DD4BF 0%, #14B8A6 55%, #0D9488 100%);
+  --gradient-sky:    linear-gradient(135deg, #5EEAD4 0%, #38BDF8 100%);
+  --gradient-mesh:   radial-gradient(120% 120% at 0% 0%, rgba(94,234,212,0.22), transparent 55%),
+                     radial-gradient(120% 120% at 100% 100%, rgba(129,140,248,0.16), transparent 55%);
+
+  /* ── 状态色 ─────────────────────────────────────────── */
+  --red:    #EF4444;
+  --orange: #F97316;
+  --amber:  #F59E0B;
+  --green:  #10B981;
+  --blue:   #3B82F6;
+  --violet: #8B5CF6;
+
+  /* ── 墨色文字层次 ─────────────────────────────────────── */
+  --ink-1:  #0B1220;
+  --ink-2:  #1E293B;
+  --ink-3:  #475569;
+  --ink-4:  #94A3B8;
+  --ink-5:  #CBD5E1;
+
+  /* ── 玻璃基色（液态玻璃核心）──────────────────────────── */
+  --glass-bg:       rgba(255, 255, 255, 0.48);
+  --glass-bg-solid: rgba(255, 255, 255, 0.82);
+  --glass-border:   rgba(255, 255, 255, 0.90);
+  --glass-stroke:   rgba(15, 23, 42, 0.06);
+  --glass-specular: rgba(255, 255, 255, 0.95);
+  --glass-blur:     28px;
+  --glass-sat:      180%;
+
+  /* 深色玻璃（nav 等） */
+  --glass-dark-bg:     rgba(15, 23, 42, 0.40);
+  --glass-dark-border: rgba(255, 255, 255, 0.18);
+  --glass-dark-stroke: rgba(0, 0, 0, 0.25);
+
+  /* 彩色玻璃高光边 */
+  --edge-top:    linear-gradient(180deg, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.30) 100%);
+  --edge-rim:    linear-gradient(135deg,
+                    rgba(255,255,255,0.90) 0%,
+                    rgba(94,234,212,0.40) 35%,
+                    rgba(255,255,255,0.60) 55%,
+                    rgba(129,140,248,0.35) 85%,
+                    rgba(255,255,255,0.70) 100%);
+
+  /* ── 基底 ─────────────────────────────────────────── */
+  --page-bg: #F0FBFB;
+  --page-ink: #0B1220;
+
+  /* ── 阴影 ─────────────────────────────────────────── */
+  --shadow-1: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-2: 0 4px 16px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-3: 0 18px 48px rgba(20, 184, 166, 0.10),
+              0 8px 24px rgba(15, 23, 42, 0.06),
+              0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-4: 0 32px 90px rgba(20, 184, 166, 0.14),
+              0 14px 36px rgba(15, 23, 42, 0.10),
+              0 4px 10px rgba(15, 23, 42, 0.06);
+  --shadow-glow: 0 0 0 1px rgba(94, 234, 212, 0.35), 0 0 40px rgba(94, 234, 212, 0.25);
+
+  /* ── 半径 ─────────────────────────────────────────── */
+  --r-s: 10px;
+  --r-m: 18px;
+  --r-l: 28px;
+  --r-xl: 36px;
+
+  /* ── 间距 ─────────────────────────────────────────── */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-7: 48px;
+  --sp-8: 64px;
+
+  /* ── 字体 ─────────────────────────────────────────── */
+  --font-display: "Noto Serif SC", "Source Han Serif SC", "Songti SC", Georgia, serif;
+  --font-ui:      "Inter", "Noto Sans SC", -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-mono:    "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+
+  --fz-xs: 12px;
+  --fz-sm: 13px;
+  --fz-md: 14px;
+  --fz-lg: 16px;
+  --fz-xl: 20px;
+  --fz-2xl: 28px;
+  --fz-3xl: 42px;
+  --fz-4xl: 64px;
+
+  /* ── 动效 ─────────────────────────────────────────── */
+  --dur-fast: 180ms;
+  --dur-base: 340ms;
+  --dur-slow: 600ms;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
