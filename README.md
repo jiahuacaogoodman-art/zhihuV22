@@ -6,6 +6,10 @@
 </p>
 
 <p align="center">
+  <b>简体中文</b> | <a href="./README.en.md">English</a>
+</p>
+
+<p align="center">
   <img alt="python"  src="https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white">
   <img alt="fastapi" src="https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white">
   <img alt="chroma"  src="https://img.shields.io/badge/ChromaDB-0.5-3C1F85">
