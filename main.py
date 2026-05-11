@@ -30,6 +30,7 @@ from app.core.config import (
 from app.middleware.auth import AuthTokenMiddleware
 from app.routers import auth as auth_router
 from app.routers import ehr, nursing
+from app.services.pii_crypto import is_encryption_enabled
 from app.services.user_store import UserStore
 
 # ----------------------------------------------------------------
@@ -58,6 +59,21 @@ user_store = UserStore(_USER_STORE_DIR / "users.db")
 # 旧部署只配了 AUTH_TOKEN 环境变量 → 自动把它注入为 admin 的 API Key
 # （UserStore 为空时才会执行；否则忽略，避免每次启动重复创建）
 user_store.bootstrap_legacy_admin(AUTH_TOKEN)
+
+# ----------------------------------------------------------------
+# PII 加密启动检查
+# Phase 1B 起：加密覆盖 10 个字段；未配置密钥会带明文风险。
+# 在启动时就判断一次并显著告警（仅 logger，不阻塞启动），
+# 另外 /health 会把当前状态暴露给运维系统。
+# ----------------------------------------------------------------
+if is_encryption_enabled():
+    logger.success("PII 加密已启用（Fernet / cryptography）— 高敏字段写入 ChromaDB 前会加密")
+else:
+    logger.warning(
+        "PII 加密未启用：PII_ENCRYPTION_KEY 未配置或 cryptography 未安装。"
+        "高敏字段（姓名/身份证/床位/联系人/过敏史等）将以明文写入 ChromaDB。"
+        "生产环境务必配置 PII_ENCRYPTION_KEY。"
+    )
 
 
 @asynccontextmanager
@@ -236,13 +252,22 @@ async def nurse_frontend():
 # 健康检查端点
 @app.get("/health", tags=["Health Check"], summary="健康检查")
 async def health_check():
-    """提供一个简单的健康检查端点，确认服务正在运行。"""
+    """
+    健康检查端点，供 systemd / k8s / 负载均衡探针使用。
+
+    Phase 1B 起新增运维可观测字段：
+      pii_encryption_enabled  布尔，Fernet 加密当前是否生效（密钥配置 + 库可用）
+      auth_mode               user_store / legacy_token / disabled
+    """
     return {
         "status": "ok",
         "message": "智护银伴后端服务正在运行",
         "base_dir": str(BASE_DIR),
         "static_dir_exists": STATIC_DIR.is_dir(),
-        "index_html_exists": INDEX_HTML.is_file()
+        "index_html_exists": INDEX_HTML.is_file(),
+        # 运维可观测 ─────────────────────────────────────────
+        "pii_encryption_enabled": is_encryption_enabled(),
+        "auth_mode": getattr(app.state, "auth_mode", "unknown"),
     }
 
 
