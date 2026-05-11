@@ -8,7 +8,9 @@ fastapi==0.115.5
 uvicorn[standard]==0.32.1
 
 # --- 向量数据库 ---
-chromadb==0.5.23
+# 注意：chromadb 0.5.23 锁定 tokenizers<=0.20.3，与 transformers 4.47.1(>=0.21) 不兼容，
+# 导致 Docker 构建时 pip 依赖解析失败。0.6.3 放宽了 tokenizers 上界，API 与 0.5.x 兼容。
+chromadb==0.6.3
 
 # --- Embedding 模型加载（sentence-transformers 本地推理）---
 sentence-transformers==3.3.1
@@ -22,10 +24,12 @@ requests==2.32.3
 # --- 数据校验（FastAPI 依赖）---
 pydantic==2.10.3
 
-# --- 工具类 ---
+# --- 数据安全 ---
+cryptography==43.0.3       # PII 字段 Fernet 加密（id_card / emergency_phone 等）
 python-multipart==0.0.20   # 支持 multipart/form-data
 python-dotenv==1.0.1       # 环境变量管理
 loguru==0.7.3              # 结构化日志
+pyyaml==6.0.2              # 护理协议模板 YAML 热加载（data/protocols.yaml）
 
 # --- 开发 / 测试（可选）---
 httpx==0.28.1              # 异步测试客户端
