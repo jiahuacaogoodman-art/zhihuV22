@@ -128,10 +128,10 @@ cd Zhihu-Yinban
 python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 
-# 2. Local LLM: install Ollama, then grab HuatuoGPT-o1-7B
-#    See "Local LLM setup" below — the model name `huatuo_o1_7b`
-#    is an in-project alias, `ollama pull huatuo_o1_7b` will 404.
+# 2. Local LLM: install Ollama, then one-shot model setup
+#    (script handles download + rename + smoke test idempotently)
 curl -fsSL https://ollama.com/install.sh | sh
+bash scripts/setup_model.sh
 
 # 3. OCR (Ubuntu — pick one or both)
 sudo apt install -y tesseract-ocr tesseract-ocr-chi-sim
@@ -154,121 +154,121 @@ Open:
 
 ## 🤖 Local LLM setup (HuatuoGPT-o1-7B)
 
-The project is wired to **HuatuoGPT-o1-7B** (a Chinese medical LLM, ~8 GB). In the code
-the model is referenced as `huatuo_o1_7b` — this is a **local alias**, not a name
-published on Ollama's official Registry. `ollama pull huatuo_o1_7b` will 404.
+The project is wired to **[HuatuoGPT-o1-7B](https://huggingface.co/FreedomIntelligence/HuatuoGPT-o1-7B)**
+— a Chinese medical LLM, ~8 GB. In the code it's referenced as `huatuo_o1_7b`, which is a
+**local alias**, not a name published on Ollama's official Registry.
+`ollama pull huatuo_o1_7b` will 404 directly.
 
-Pick one of the three methods below. The goal is the same either way:
-**`ollama list` must show `huatuo_o1_7b:latest`** when you're done.
+### One-shot install (recommended)
 
-### Upstream sources
-
-| Source | Link |
-|---|---|
-| 🤗 HuggingFace (original weights) | [FreedomIntelligence/HuatuoGPT-o1-7B](https://huggingface.co/FreedomIntelligence/HuatuoGPT-o1-7B) |
-| 🤗 HuggingFace (GGUF quants) | [bartowski/HuatuoGPT-o1-7B-GGUF](https://huggingface.co/bartowski/HuatuoGPT-o1-7B-GGUF) |
-| 📦 Ollama community (pre-packaged) | [cliu/HuatuoGPT-o1-7B](https://ollama.com/cliu/HuatuoGPT-o1-7B) |
-| 📄 GitHub (upstream + paper) | [FreedomIntelligence/HuatuoGPT-o1](https://github.com/FreedomIntelligence/HuatuoGPT-o1) |
-
-### Method A — pull from Ollama community (easiest)
+Make sure [Ollama](https://ollama.com/) is installed and running, then:
 
 ```bash
-# Needs internet once, ~8 GB
-ollama pull cliu/HuatuoGPT-o1-7B:latest
-
-# Rename to the alias this project uses
-ollama cp cliu/HuatuoGPT-o1-7B:latest huatuo_o1_7b
-
-# Verify
-ollama list | grep huatuo_o1_7b
+bash scripts/setup_model.sh
 ```
 
-### Method B — import a GGUF from HuggingFace (most control)
+The script: checks Ollama is up → pulls 8 GB of weights from the
+[community package](https://ollama.com/cliu/HuatuoGPT-o1-7B) → aliases them to `huatuo_o1_7b` →
+runs a smoke test. Expected output:
 
-Best for air-gapped installs or when you need to pick a specific quantization
-(Q4_K_M balanced ≈ 4.7 GB, Q8_0 high-quality ≈ 8.1 GB):
-
-```bash
-# 1. Download a single GGUF file (pick any quant from the file list on HF)
-#    Listing: https://huggingface.co/bartowski/HuatuoGPT-o1-7B-GGUF/tree/main
-wget https://huggingface.co/bartowski/HuatuoGPT-o1-7B-GGUF/resolve/main/HuatuoGPT-o1-7B-Q4_K_M.gguf
-
-# 2. Modelfile — mind the FROM path
-cat > Modelfile <<'EOF'
-FROM ./HuatuoGPT-o1-7B-Q4_K_M.gguf
-PARAMETER temperature 0.3
-PARAMETER top_p 0.9
-PARAMETER num_ctx 8192
-TEMPLATE """<|im_start|>system
-{{ .System }}<|im_end|>
-<|im_start|>user
-{{ .Prompt }}<|im_end|>
-<|im_start|>assistant
-"""
-EOF
-
-# 3. Register under the project's expected name
-ollama create huatuo_o1_7b -f Modelfile
-
-# 4. Verify
-ollama list | grep huatuo_o1_7b
+```
+[ ok ] ollama installed
+[ ok ] ollama service responding at :11434
+[ ok ] cliu/HuatuoGPT-o1-7B:latest already present, skipping pull
+[ ok ] alias huatuo_o1_7b already present, skipping
+[ ok ] model replied: Hi! I'm HuatuoGPT...
+=== All set ===
 ```
 
-### Method C — use a different model (low-memory fallback)
+The script is **idempotent** — safe to re-run after a network interruption.
 
-The project isn't hard-bound to HuatuoGPT. If your machine can't carry a 7B model,
-swap in any Ollama-supported Chinese model and override the env var:
+### Can't run a 7B model? Fall back to a smaller one (30 seconds)
+
+If your box has less than 16 GB RAM the 7B model will OOM. Swap in Qwen 2.5 3B:
 
 ```bash
 ollama pull qwen2.5:3b
 echo 'OLLAMA_MODEL_NAME=qwen2.5:3b' >> .env
 ```
 
-> Heads-up: non-medical models occasionally emit extra prose around the strict-JSON
+> Heads-up: non-medical models occasionally add extra prose around the strict-JSON
 > task-card response, which can fail parsing. The project has a retry fallback, but
 > for clinical use stick with HuatuoGPT-o1-7B.
 
-### Start the Ollama service
+### Verify the install
 
 ```bash
-# Linux (systemd installer starts it automatically):
-systemctl status ollama
+# Check the alias exists
+ollama list | grep huatuo_o1_7b
 
-# macOS / manual:
-ollama serve                      # foreground
-# or background:
-nohup ollama serve > /tmp/ollama.log 2>&1 &
-```
-
-Ollama listens on `http://localhost:11434` by default; that URL is baked into
-[`app/core/config.py`](./app/core/config.py) as `OLLAMA_API_URL`. If you host Ollama
-on a different machine, either run this project alongside it or point
-`OLLAMA_API_URL` at the remote host.
-
-### End-to-end smoke test (do this before wiring up the frontend)
-
-```bash
-# 1. Talk to Ollama directly
-ollama run huatuo_o1_7b "Introduce yourself in one sentence."
-
-# 2. Hit the generate endpoint (what this project uses under the hood)
-curl -s http://localhost:11434/api/generate \
-  -d '{"model":"huatuo_o1_7b","prompt":"What should a caregiver do for elderly dizziness?","stream":false}' \
-  | head -c 300
-
-# 3. Start the backend, then hit the health check
-curl -s http://localhost:8000/health
+# Talk to it (first cold start takes 5–30 s)
+ollama run huatuo_o1_7b "What should a caregiver do for elderly dizziness?"
 ```
 
 ### Common gotchas
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `pull model manifest: file does not exist` | Model name not in Registry | Use Method A with `cliu/HuatuoGPT-o1-7B`, or Method B via `ollama create` |
-| `connection refused :11434` | Ollama service not running | `ollama serve`, or `systemctl start ollama` |
-| Nursing API returns `503 local LLM unavailable` | Ollama not ready / name mismatch | Confirm `ollama list` shows `huatuo_o1_7b:latest`; restart the backend |
-| First inference is slow (10 s+) | Cold start — loading weights | Expected; warm it up once via `ollama run huatuo_o1_7b ""` |
-| OOM on 16 GB machines | Q8 is tight at 16 GB | Use Method B with Q4_K_M, or drop to Method C |
+| Script says "ollama not found" | Ollama not installed | `curl -fsSL https://ollama.com/install.sh \| sh` |
+| Script says "service not responding at :11434" | Ollama daemon not running | Linux: `sudo systemctl start ollama`; macOS: open Ollama.app |
+| `pull` stalls / times out | Network can't reach the Registry | Use a proxy, re-run `bash scripts/setup_model.sh` |
+| Nursing API returns `503 local LLM unavailable` | Ollama not ready when backend started | `ollama list` shows `huatuo_o1_7b:latest`; restart the backend |
+| First inference takes 10 s+ | Cold start loading weights | Expected; pre-warm with `ollama run huatuo_o1_7b ""` |
+| OOM on 16 GB | 7B is tight at 16 GB | Use the smaller-model fallback above |
+
+<details>
+<summary><b>Advanced: air-gapped install / custom quantization (import from GGUF)</b></summary>
+
+For offline machines or when you need a specific quantization level
+(Q4_K_M 4.7 GB balanced / Q6_K 6.25 GB near-lossless / Q8_0 8.10 GB max),
+skip the one-shot script and import a GGUF directly from HuggingFace:
+
+```bash
+# 1. Download GGUF (huggingface-cli is more reliable than wget, supports resumption)
+pip install -U "huggingface_hub[cli]"
+huggingface-cli download bartowski/HuatuoGPT-o1-7B-GGUF \
+  --include "HuatuoGPT-o1-7B-Q4_K_M.gguf" \
+  --local-dir ./
+
+# 2. Modelfile — don't omit the stop tokens, or the model will keep generating
+#    the next fake "user" turn after its answer
+cat > Modelfile <<'EOF'
+FROM ./HuatuoGPT-o1-7B-Q4_K_M.gguf
+
+TEMPLATE """<|im_start|>system
+{{ .System }}<|im_end|>
+<|im_start|>user
+{{ .Prompt }}<|im_end|>
+<|im_start|>assistant
+"""
+
+PARAMETER stop "<|im_start|>"
+PARAMETER stop "<|im_end|>"
+PARAMETER temperature 0.3
+PARAMETER top_p 0.9
+PARAMETER num_ctx 8192
+PARAMETER num_predict 2048
+EOF
+
+# 3. Register under the project's expected alias
+ollama create huatuo_o1_7b -f Modelfile
+
+# 4. Verify
+ollama list | grep huatuo_o1_7b
+```
+
+**Which quant to pick**:
+
+| Hardware | Recommended | Size |
+|---|---|---|
+| 16 GB RAM, CPU only | `Q4_K_M` | 4.68 GB |
+| 32 GB RAM or 8 GB VRAM | `Q6_K` | 6.25 GB |
+| 16 GB+ VRAM GPU | `Q8_0` | 8.10 GB |
+| Apple Silicon (M1/M2/M3) | `IQ4_NL` | 4.44 GB |
+
+Full quantization list: [bartowski/HuatuoGPT-o1-7B-GGUF](https://huggingface.co/bartowski/HuatuoGPT-o1-7B-GGUF/tree/main).
+
+</details>
 
 ---
 
