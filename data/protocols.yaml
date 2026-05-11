@@ -1,0 +1,479 @@
+# ============================================================
+# 智护银伴 · 护理事件处置协议模板
+# 护理专家可直接编辑本文件，服务器无需重启（热加载）。
+#
+# 字段说明：
+#   event_type     事件类型名称（显示给护工）
+#   risk_default   默认风险等级（red / orange / yellow / green）
+#   triggers       护工描述命中词（触发该协议的关键词）
+#   high_risk_ehr  EHR 中的高危背景因素（提高风险级别）
+#   immediate_tasks 立即执行的护理任务列表：
+#     text          任务描述（20字以内）
+#     priority      优先级 high / medium / low
+#     required      是否必须执行
+#     input_required（可选）需要护工填写的数值字段：
+#       field       英文字段名
+#       label       中文标签
+#       unit        单位
+#   conditional_tasks 条件性任务：
+#     condition     触发条件描述
+#     tasks         需要执行的任务列表
+#   forbidden_actions 禁止事项列表
+#   recheck_plan  复测计划：
+#     after_minutes 几分钟后复测
+#     text          复测内容
+# ============================================================
+
+hypoglycemia:
+  event_type: 疑似低血糖风险事件
+  risk_default: orange
+  triggers:
+    - 头晕
+    - 出汗
+    - 心慌
+    - 手抖
+    - 低血糖
+    - 乏力
+    - 冒汗
+    - 餐后
+    - 空腹
+    - 意识模糊
+  high_risk_ehr:
+    - 糖尿病
+    - 胰岛素
+    - 降糖
+    - 二甲双胍
+    - 格列
+    - 血糖
+  immediate_tasks:
+    - text: 让老人坐下或平卧，防止跌倒
+      priority: high
+      required: true
+    - text: 立即测量指尖血糖
+      priority: high
+      required: true
+      input_required:
+        field: blood_glucose
+        label: 血糖
+        unit: mmol/L
+    - text: 观察意识状态、面色、出汗和心慌情况
+      priority: high
+      required: true
+    - text: 通知责任护士或值班负责人
+      priority: high
+      required: true
+    - text: 记录症状开始时间和最近一次进食情况
+      priority: medium
+      required: true
+  conditional_tasks:
+    - condition: 若血糖 < 3.9 mmol/L
+      tasks:
+        - 按机构低血糖护理预案处理
+        - 15分钟后复测血糖
+        - 持续观察意识状态，必要时立即上报
+    - condition: 若血糖正常但症状持续
+      tasks:
+        - 继续观察生命体征
+        - 联系责任护士进一步评估
+        - 准备既往病历和用药清单
+  forbidden_actions:
+    - 不要让老人独自站立或行走
+    - 不要擅自追加降糖药或胰岛素
+    - 不要未经核对自行给药
+    - 不要症状缓解后漏记护理记录
+  recheck_plan:
+    - after_minutes: 15
+      text: 复测血糖
+    - after_minutes: 30
+      text: 复查意识、面色、出汗情况
+
+chest_distress:
+  event_type: 胸闷气短/心肺急症风险事件
+  risk_default: red
+  triggers:
+    - 胸闷
+    - 胸痛
+    - 气短
+    - 喘不上气
+    - 憋气
+    - 大汗
+    - 心前区
+    - 心口疼
+    - 呼吸困难
+  high_risk_ehr:
+    - 冠心病
+    - 心梗
+    - 支架
+    - 心衰
+    - 房颤
+    - 高血压
+    - 糖尿病
+    - 硝酸甘油
+  immediate_tasks:
+    - text: 立即停止活动，协助老人取安全舒适体位
+      priority: high
+      required: true
+    - text: 观察意识、呼吸、面色、出汗情况
+      priority: high
+      required: true
+    - text: 测量血压、心率和血氧（如有设备）
+      priority: high
+      required: true
+    - text: 立即通知责任护士/值班负责人
+      priority: high
+      required: true
+    - text: 准备既往病历、用药清单和急救联系信息
+      priority: medium
+      required: true
+  conditional_tasks:
+    - condition: 若持续胸痛/胸闷、呼吸困难、意识改变或大汗
+      tasks:
+        - 立即启动机构急救流程
+        - 由负责人联系120
+        - 同步通知家属保持电话畅通
+    - condition: 若存在医生既往明确备用药
+      tasks:
+        - 必须由责任护士/负责人核对后按机构预案处理
+        - 普通护工不得自行决定给药
+  forbidden_actions:
+    - 不要让老人继续走动或用力
+    - 不要让普通护工自行给药
+    - 不要用普通胃痛或情绪问题解释持续胸闷
+    - 不要延迟上报
+  recheck_plan:
+    - after_minutes: 5
+      text: 复查意识、呼吸、胸闷程度
+    - after_minutes: 10
+      text: 复测血压/心率/血氧
+
+fall:
+  event_type: 跌倒/外伤风险事件
+  risk_default: orange
+  triggers:
+    - 跌倒
+    - 摔倒
+    - 滑倒
+    - 摔了
+    - 起夜
+    - 腰疼
+    - 髋部
+    - 膝盖
+    - 擦伤
+    - 撞头
+  high_risk_ehr:
+    - 骨质疏松
+    - 华法林
+    - 阿司匹林
+    - 抗凝
+    - 脑卒中
+    - 偏瘫
+    - 痴呆
+    - 帕金森
+  immediate_tasks:
+    - text: 不要立即强行扶起，先确认意识和疼痛部位
+      priority: high
+      required: true
+    - text: 询问是否撞头、是否头痛恶心、是否能活动四肢
+      priority: high
+      required: true
+    - text: 检查出血、淤青、畸形和活动受限
+      priority: high
+      required: true
+    - text: 通知责任护士/值班负责人
+      priority: high
+      required: true
+    - text: 记录跌倒时间、地点、姿势和现场环境
+      priority: medium
+      required: true
+  conditional_tasks:
+    - condition: 若撞头、意识异常、剧痛、不能站立或疑似骨折
+      tasks:
+        - 保持原位保护
+        - 立即联系负责人启动急救流程
+        - 准备病历和用药清单
+    - condition: 若档案提示抗凝/抗血小板用药
+      tasks:
+        - 重点观察出血和淤青扩大
+        - 延长按压止血时间
+        - 提高上报等级
+  forbidden_actions:
+    - 不要强行拖拽或搬动疑似骨折部位
+    - 不要忽略是否撞头
+    - 不要漏查抗凝药使用史
+    - 不要未记录就让老人继续活动
+  recheck_plan:
+    - after_minutes: 15
+      text: 复查疼痛、意识和出血情况
+    - after_minutes: 60
+      text: 复查淤青、活动受限和迟发不适
+
+fever:
+  event_type: 发热/感染风险事件
+  risk_default: yellow
+  triggers:
+    - 发热
+    - 发烧
+    - 体温
+    - 寒战
+    - 发冷
+    - 咳嗽
+    - 乏力
+    - 感染
+  high_risk_ehr:
+    - 糖尿病
+    - 慢阻肺
+    - 长期卧床
+    - 导尿
+    - 免疫
+    - 肺炎
+    - 心衰
+  immediate_tasks:
+    - text: 测量并记录体温
+      priority: high
+      required: true
+      input_required:
+        field: temperature
+        label: 体温
+        unit: ℃
+    - text: 观察呼吸、意识、咳嗽咳痰和尿量
+      priority: high
+      required: true
+    - text: 协助适当饮水，评估进食和脱水风险
+      priority: medium
+      required: false
+    - text: 按机构流程进行物理降温
+      priority: medium
+      required: false
+    - text: 通知责任护士并持续观察
+      priority: medium
+      required: true
+  conditional_tasks:
+    - condition: 若体温持续升高、意识改变、呼吸困难或寒战明显
+      tasks:
+        - 升级为红/橙色事件
+        - 立即上报负责人
+        - 必要时联系医生或120
+    - condition: 若合并糖尿病
+      tasks:
+        - 增加血糖监测
+        - 记录饮水和进食情况
+  forbidden_actions:
+    - 不要擅自使用退烧药或抗生素
+    - 不要忽略老年人感染症状不典型
+    - 不要只记录体温而不观察意识和呼吸
+  recheck_plan:
+    - after_minutes: 30
+      text: 复测体温
+    - after_minutes: 60
+      text: 复查精神状态、呼吸和饮水情况
+
+aspiration:
+  event_type: 呛咳/误吸风险事件
+  risk_default: orange
+  triggers:
+    - 呛咳
+    - 呛了
+    - 误吸
+    - 喝水呛
+    - 吃饭呛
+    - 咳得厉害
+    - 嘴唇发紫
+    - 吞咽
+  high_risk_ehr:
+    - 脑卒中
+    - 吞咽障碍
+    - 帕金森
+    - 痴呆
+    - 长期卧床
+    - 鼻饲
+  immediate_tasks:
+    - text: 立即停止进食和饮水
+      priority: high
+      required: true
+    - text: 协助取安全体位，避免继续误吸
+      priority: high
+      required: true
+    - text: 观察呼吸、咳嗽、口唇颜色和意识
+      priority: high
+      required: true
+    - text: 通知责任护士/值班负责人
+      priority: high
+      required: true
+    - text: 记录误吸发生时间、食物/液体类型和量
+      priority: medium
+      required: true
+  conditional_tasks:
+    - condition: 若呼吸困难、口唇发紫、意识改变或持续剧烈咳嗽
+      tasks:
+        - 立即启动急救流程
+        - 由负责人联系120
+        - 准备病历和既往吞咽评估资料
+  forbidden_actions:
+    - 不要继续喂水喂饭
+    - 不要让老人平躺进食
+    - 不要忽略脑卒中/吞咽障碍病史
+    - 不要症状缓解后漏记
+  recheck_plan:
+    - after_minutes: 10
+      text: 复查呼吸、咳嗽和口唇颜色
+    - after_minutes: 30
+      text: 复查是否发热、气促或痰鸣
+
+allergy:
+  event_type: 皮疹/药物过敏风险事件
+  risk_default: orange
+  triggers:
+    - 皮疹
+    - 红疹
+    - 瘙痒
+    - 脸肿
+    - 嘴唇肿
+    - 过敏
+    - 新药
+    - 喘
+    - 起包
+  high_risk_ehr:
+    - 过敏
+    - 青霉素
+    - 头孢
+    - 药物过敏
+    - 食物过敏
+    - 哮喘
+  immediate_tasks:
+    - text: 停止接触可疑食物、药物或外用物
+      priority: high
+      required: true
+    - text: 观察呼吸、面唇肿胀、皮疹范围和意识
+      priority: high
+      required: true
+    - text: 立即通知责任护士/值班负责人
+      priority: high
+      required: true
+    - text: 记录可疑诱因、发生时间和症状变化
+      priority: medium
+      required: true
+  conditional_tasks:
+    - condition: 若呼吸困难、喉头紧缩、面唇明显肿胀或意识异常
+      tasks:
+        - 立即启动急救流程
+        - 由负责人联系120
+        - 同步通知家属
+  forbidden_actions:
+    - 不要继续服用可疑药物
+    - 不要普通护工自行给抗过敏药
+    - 不要忽略呼吸道症状
+    - 不要删除或覆盖过敏记录
+  recheck_plan:
+    - after_minutes: 10
+      text: 复查呼吸和面唇肿胀
+    - after_minutes: 30
+      text: 复查皮疹范围和瘙痒程度
+
+abdominal_pain:
+  event_type: 腹痛/消化系统急症风险事件
+  risk_default: orange
+  triggers:
+    - 腹痛
+    - 肚子痛
+    - 胃疼
+    - 恶心
+    - 呕吐
+    - 冷汗
+    - 右上腹
+    - 便血
+    - 黑便
+    - 黄疸
+  high_risk_ehr:
+    - 胆结石
+    - 胃溃疡
+    - 消化道出血
+    - 阿司匹林
+    - 华法林
+    - 抗凝
+    - 肝胆
+  immediate_tasks:
+    - text: 询问疼痛部位、持续时间和诱因
+      priority: high
+      required: true
+    - text: 观察面色、冷汗、呕吐、便血/黑便和发热
+      priority: high
+      required: true
+    - text: 协助取安全舒适体位，暂缓进食
+      priority: medium
+      required: true
+    - text: 通知责任护士/值班负责人
+      priority: high
+      required: true
+    - text: 准备既往病历和长期用药清单
+      priority: medium
+      required: true
+  conditional_tasks:
+    - condition: 若疼痛持续加重、冷汗明显、呕血/黑便、黄疸或意识改变
+      tasks:
+        - 立即升级风险等级
+        - 由负责人联系医生或120
+        - 持续记录疼痛变化
+  forbidden_actions:
+    - 不要擅自给止痛药掩盖病情
+    - 不要让老人继续进食大量食物
+    - 不要忽略抗凝/阿司匹林用药史
+    - 不要仅按普通胃疼处理持续腹痛
+  recheck_plan:
+    - after_minutes: 15
+      text: 复查疼痛程度、面色和出汗
+    - after_minutes: 30
+      text: 复查呕吐、体温和排便情况
+
+consciousness:
+  event_type: 意识异常/疑似神经系统急症风险事件
+  risk_default: red
+  triggers:
+    - 叫不醒
+    - 反应慢
+    - 意识
+    - 糊涂
+    - 说话不清
+    - 一侧无力
+    - 嘴歪
+    - 抽搐
+    - 昏睡
+  high_risk_ehr:
+    - 脑卒中
+    - 高血压
+    - 糖尿病
+    - 房颤
+    - 抗凝
+    - 癫痫
+    - 短暂性脑缺血
+  immediate_tasks:
+    - text: 立即通知责任护士/值班负责人
+      priority: high
+      required: true
+    - text: 记录首次发现异常的准确时间
+      priority: high
+      required: true
+    - text: 观察言语、口角、肢体活动和意识反应
+      priority: high
+      required: true
+    - text: 测量血压、血糖和血氧（如有设备）
+      priority: high
+      required: true
+    - text: 准备病历、用药清单和家属联系方式
+      priority: medium
+      required: true
+  conditional_tasks:
+    - condition: 若出现说话不清、一侧无力、口角歪斜、抽搐或持续叫不醒
+      tasks:
+        - 立即启动急救流程
+        - 由负责人联系120
+        - 禁止喂水喂食并保持安全体位
+  forbidden_actions:
+    - 不要喂水喂食
+    - 不要等待自行缓解
+    - 不要漏记首次发现时间
+    - 不要让老人独处
+  recheck_plan:
+    - after_minutes: 5
+      text: 复查意识、言语和肢体活动
+    - after_minutes: 10
+      text: 复测血压/血糖/血氧
