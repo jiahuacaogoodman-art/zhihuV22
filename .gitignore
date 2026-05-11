@@ -27,8 +27,10 @@ local_ehr_uploads/
 nohup.out
 
 # Model weights (download at runtime)
-models/
-weights/
+# 只忽略仓库根目录的 models/ 和 weights/（用于存放本地大模型权重）
+# 不能直接写 `models/` —— 那样连 app/models/ 里的 Pydantic Schemas 也会被吞掉
+/models/
+/weights/
 *.onnx
 *.gguf
 
