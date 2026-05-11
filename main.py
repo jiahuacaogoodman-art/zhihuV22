@@ -21,8 +21,10 @@ from app.core.config import (
     CHROMA_COLLECTION_NAME,
     EMBEDDING_MODEL_NAME,
     EMBEDDING_DEVICE,
-    EHR_UPLOAD_DIR
+    EHR_UPLOAD_DIR,
+    AUTH_TOKEN,
 )
+from app.middleware.auth import AuthTokenMiddleware
 from app.routers import ehr, nursing
 
 # ----------------------------------------------------------------
@@ -101,6 +103,16 @@ app = FastAPI(
 # 挂载 API 路由
 app.include_router(ehr.router, prefix="/api", tags=["EHR Management"])
 app.include_router(nursing.router, prefix="/api", tags=["Nursing Decision Support"])
+
+# ----------------------------------------------------------------
+# 鉴权中间件：保护 /api/* 和 /uploads/*
+# AUTH_TOKEN 留空则关闭（开发模式）；生产部署必须通过环境变量设置。
+# ----------------------------------------------------------------
+app.add_middleware(AuthTokenMiddleware, token=AUTH_TOKEN)
+if AUTH_TOKEN:
+    logger.info("鉴权已启用：/api/* 和 /uploads/* 需要 X-Auth-Token 请求头")
+else:
+    logger.warning("AUTH_TOKEN 未配置，鉴权已关闭（仅限开发环境，生产请设置环境变量 AUTH_TOKEN）")
 
 # ----------------------------------------------------------------
 # 关键修复：使用绝对路径挂载静态文件目录
