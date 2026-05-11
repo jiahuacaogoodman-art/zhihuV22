@@ -15,7 +15,8 @@ from typing import List, Optional
 from fastapi import APIRouter, Body, File, Form, HTTPException, UploadFile, status
 from loguru import logger
 
-from app.core.config import EHR_UPLOAD_DIR, MAX_UPLOAD_SIZE_MB, ALLOWED_UPLOAD_EXTENSIONS
+from app.core.config import EHR_UPLOAD_DIR, MAX_UPLOAD_SIZE_MB, ALLOWED_UPLOAD_EXTENSIONS, BASE_DIR
+from app.services.audit_log import AuditLog, _diff_meta
 from app.services.pii_crypto import encrypt_pii_fields, decrypt_pii_fields
 from app.models.schemas import (
     EHRAddRequest, EHRAddResponse,
@@ -27,6 +28,11 @@ from app.services.ocr_service import LocalOCRService
 
 router = APIRouter()
 ocr_service = LocalOCRService()
+
+# 审计日志（单独 SQLite，与业务库分离）
+_AUDIT_DIR = Path(BASE_DIR) / "local_audit_log"
+_AUDIT_DIR.mkdir(parents=True, exist_ok=True)
+audit = AuditLog(_AUDIT_DIR / "audit.db")
 
 UPLOAD_ROOT = Path(EHR_UPLOAD_DIR)
 UPLOAD_ROOT.mkdir(parents=True, exist_ok=True)
@@ -222,6 +228,8 @@ async def add_ehr(payload: EHRAddRequest):
     try:
         _add_document_to_collection(collection, embedding_function, doc_id, document, metadata)
         logger.success(f"档案录入成功: doc_id={doc_id}")
+        audit.log("PATIENT_CREATE", payload.patient_id, "api",
+                  doc_id=doc_id, detail=f"新建患者档案: {payload.name}")
         return EHRAddResponse(
             code=200,
             message=f"患者 {payload.name} 的档案已成功录入",
@@ -323,6 +331,10 @@ async def update_ehr(payload: EHRUpdateRequest):
         new_doc_id = f"{payload.patient_id}_{uuid.uuid4().hex[:8]}"
         _add_document_to_collection(collection, embedding_function, new_doc_id, new_document, new_metadata)
         logger.success(f"档案修改成功: patient_id={payload.patient_id}")
+        diff = _diff_meta(old_meta, merged, list(merged.keys()))
+        audit.log("PATIENT_UPDATE", payload.patient_id, "api",
+                  doc_id=new_doc_id, detail=f"修改患者档案: {merged.get('name', '')}",
+                  diff=diff)
         return EHRUpdateResponse(
             code=200,
             message=f"患者 {merged.get('name', payload.patient_id)} 的基本档案已更新",
@@ -422,6 +434,10 @@ async def upload_medical_records(
         })
 
     logger.success(f"病历照片上传完成: patient_id={patient_id}, count={len(saved)}")
+    for rec in saved:
+        audit.log("RECORD_UPLOAD", patient_id, "api",
+                  doc_id=rec["doc_id"],
+                  detail=f"上传病历照片: {rec['original_filename']} (ocr={rec['ocr_status']})")
     return {"code": 200, "message": f"已上传 {len(saved)} 份病历照片，并同步保存原图与 OCR 文本", "records": saved}
 
 
@@ -476,6 +492,9 @@ async def delete_medical_record(doc_id: str):
         if p:
             Path(p).unlink(missing_ok=True)
     collection.delete(ids=[doc_id])
+    audit.log("RECORD_DELETE", meta.get("patient_id", ""), "api",
+              doc_id=doc_id,
+              detail=f"删除病历照片: {meta.get('original_filename', '')}")
     return {"code": 200, "message": "病历照片档案已删除", "doc_id": doc_id}
 
 
@@ -496,6 +515,8 @@ async def delete_ehr(payload: EHRDeleteRequest):
 
         collection.delete(ids=existing_ids)
         logger.success(f"档案删除成功: patient_id={payload.patient_id}, 删除 {len(existing_ids)} 条")
+        audit.log("PATIENT_DELETE", payload.patient_id, "api",
+                  detail=f"删除患者全部档案，共 {len(existing_ids)} 条记录")
         return EHRDeleteResponse(
             code=200,
             message=f"患者 {payload.patient_id} 的全部档案、病历照片与 OCR 文本已删除",
@@ -507,3 +528,24 @@ async def delete_ehr(payload: EHRDeleteRequest):
     except Exception as e:
         logger.error(f"档案删除失败: {e}")
         raise HTTPException(status_code=500, detail=f"删除失败: {str(e)}")
+
+
+
+# ── 操作审计日志查询 ─────────────────────────────────────────────
+@router.get("/ehr/audit", summary="查询操作审计日志")
+async def get_audit_log(
+    patient_id: Optional[str] = None,
+    action: Optional[str] = None,
+    limit: int = 100,
+):
+    """
+    返回档案操作审计记录（按时间倒序）。
+
+    - patient_id：筛选指定患者的操作记录
+    - action：筛选操作类型（PATIENT_CREATE / PATIENT_UPDATE / PATIENT_DELETE /
+               RECORD_UPLOAD / RECORD_DELETE）
+    - limit：最多返回条数（默认 100，最大 500）
+    """
+    limit = min(limit, 500)
+    records = audit.query(patient_id=patient_id, action=action, limit=limit)
+    return {"code": 200, "total": len(records), "records": records}
