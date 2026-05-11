@@ -97,9 +97,10 @@ cd Zhihu-Yinban
 python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 
-# 3. 本地大模型（首次需联网拉取，之后可完全断网）
+# 3. 本地大模型：安装 Ollama + 拉 HuatuoGPT-o1-7B（详见下方【本地大模型配置】）
 curl -fsSL https://ollama.com/install.sh | sh
-ollama pull huatuo_o1_7b
+# ⚠️ 不能直接 `ollama pull huatuo_o1_7b` —— 这个名字是本项目的本地别名，
+#    官方 Registry 没有这一条。具体怎么拿到权重，请看下一节。
 
 # 4. OCR（Ubuntu，二选一或都装）
 sudo apt install -y tesseract-ocr tesseract-ocr-chi-sim
@@ -122,6 +123,124 @@ uvicorn main:app --host 0.0.0.0 --port 8000
 | 健康检查 | http://localhost:8000/health |
 
 > 首次启动会下载 `bge-small-zh-v1.5`（约 100MB）到 `~/.cache/torch/sentence_transformers/`，下载一次后即可完全断网运行。
+
+---
+
+## 🤖 本地大模型配置（HuatuoGPT-o1-7B）
+
+项目默认用的是 **HuatuoGPT-o1-7B**（中文医疗大模型，约 8 GB），代码里用的名字叫 `huatuo_o1_7b`，
+这个名字**只是本项目的本地别名**，Ollama 官方 Registry 上并没有这一条，直接 pull 会 404。
+下面是三种获取方式，任选一种，**最终都要让 `ollama list` 能看到 `huatuo_o1_7b:latest`**。
+
+### 模型出处（官方权重）
+
+| 来源 | 链接 |
+|---|---|
+| 🤗 HuggingFace（原始权重） | [FreedomIntelligence/HuatuoGPT-o1-7B](https://huggingface.co/FreedomIntelligence/HuatuoGPT-o1-7B) |
+| 🤗 HuggingFace（GGUF 量化） | [bartowski/HuatuoGPT-o1-7B-GGUF](https://huggingface.co/bartowski/HuatuoGPT-o1-7B-GGUF) |
+| 📦 Ollama 社区（已打包） | [cliu/HuatuoGPT-o1-7B](https://ollama.com/cliu/HuatuoGPT-o1-7B) |
+| 📄 GitHub（原项目 + 论文） | [FreedomIntelligence/HuatuoGPT-o1](https://github.com/FreedomIntelligence/HuatuoGPT-o1) |
+
+### 方式 A：从 Ollama 社区直接拉（推荐，最省事）
+
+```bash
+# 1. 拉 8GB 左右，只需联网一次
+ollama pull cliu/HuatuoGPT-o1-7B:latest
+
+# 2. 给它起个本项目用的别名（代码里写死叫 huatuo_o1_7b）
+ollama cp cliu/HuatuoGPT-o1-7B:latest huatuo_o1_7b
+
+# 3. 验证
+ollama list | grep huatuo_o1_7b
+# 应看到：huatuo_o1_7b   latest   ...GB   <时间戳>
+```
+
+### 方式 B：从 HuggingFace 下 GGUF + Modelfile 导入（更可控）
+
+适合断网环境 / 想自己挑量化精度（Q4_K_M 平衡版约 4.7 GB，Q8_0 高精度约 8.1 GB）：
+
+```bash
+# 1. 下载单个 GGUF 文件（任选一个量化）
+#    下载页：https://huggingface.co/bartowski/HuatuoGPT-o1-7B-GGUF/tree/main
+wget https://huggingface.co/bartowski/HuatuoGPT-o1-7B-GGUF/resolve/main/HuatuoGPT-o1-7B-Q4_K_M.gguf
+
+# 2. 写一个 Modelfile（注意 FROM 的路径要对）
+cat > Modelfile <<'EOF'
+FROM ./HuatuoGPT-o1-7B-Q4_K_M.gguf
+PARAMETER temperature 0.3
+PARAMETER top_p 0.9
+PARAMETER num_ctx 8192
+TEMPLATE """<|im_start|>system
+{{ .System }}<|im_end|>
+<|im_start|>user
+{{ .Prompt }}<|im_end|>
+<|im_start|>assistant
+"""
+EOF
+
+# 3. 导入并用本项目需要的名字注册
+ollama create huatuo_o1_7b -f Modelfile
+
+# 4. 验证
+ollama list | grep huatuo_o1_7b
+```
+
+### 方式 C：用别的模型替代（硬件吃紧时）
+
+项目并不绑死 HuatuoGPT，如果机器带不动 7B，可以换成任何 Ollama 支持的中文模型，
+改一下环境变量里的模型名即可：
+
+```bash
+# 举例：用 4B 的 Qwen 2.5 顶上
+ollama pull qwen2.5:3b
+
+# 写进 .env（优先级高于 app/core/config.py 默认值）
+echo 'OLLAMA_MODEL_NAME=qwen2.5:3b' >> .env
+```
+
+> 注意：非医疗专用模型在"护理任务卡严格 JSON 输出"这个场景下，偶尔会吐出多余文字导致解析失败。
+> 项目里有兜底重试，但医疗场景还是强烈建议用 HuatuoGPT-o1-7B。
+
+### 启动 Ollama 服务
+
+```bash
+# Linux（systemd 安装方式已自动启）：
+systemctl status ollama
+
+# macOS / 手动模式：
+ollama serve                      # 前台运行，日志直接可见
+# 或后台：
+nohup ollama serve > /tmp/ollama.log 2>&1 &
+```
+
+Ollama 默认监听 `http://localhost:11434`，本项目写死从这里拿模型（见
+[`app/core/config.py`](./app/core/config.py) 的 `OLLAMA_API_URL`）。如果你把 Ollama 装在别的机器上，
+要么在该机器上也启动本项目，要么改 `OLLAMA_API_URL` 指过去。
+
+### 端到端验证（装完别急着接前端，先走一遍）
+
+```bash
+# 1. 直接调 Ollama，确认模型能回话
+ollama run huatuo_o1_7b "你好，请用一句话介绍自己"
+
+# 2. 用项目的 API 跑一次最小推理
+curl -s http://localhost:11434/api/generate \
+  -d '{"model":"huatuo_o1_7b","prompt":"高血压老人头晕该怎么处理？","stream":false}' \
+  | head -c 300
+
+# 3. 启动本项目后，健康检查应看到服务就绪
+curl -s http://localhost:8000/health
+```
+
+### 常见坑
+
+| 现象 | 原因 | 解决 |
+|---|---|---|
+| `pull model manifest: file does not exist` | 模型名拼错 / Registry 里没这条 | 走方式 A 的 `cliu/HuatuoGPT-o1-7B`，或方式 B 自己 create |
+| `connection refused :11434` | Ollama 服务没起 | `ollama serve` 或 `systemctl start ollama` |
+| 护理决策接口 503 "本地大模型不可用" | 项目启动时 Ollama 还没就绪 / 模型名对不上 | `ollama list` 确认 `huatuo_o1_7b:latest` 存在；重启本项目 |
+| 第一次推理特别慢（10s+） | 冷启动要加载权重到显存/内存 | 正常现象，之后会快很多；想预热就先 `ollama run huatuo_o1_7b ""` |
+| 内存炸 OOM | 16 GB 内存跑 Q8 偏紧 | 改用 Q4_K_M 量化（方式 B），或换方式 C 的小模型 |
 
 ---
 
