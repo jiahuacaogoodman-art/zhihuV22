@@ -39,6 +39,7 @@ jobs:
             loguru \
             numpy \
             chromadb \
+            cryptography \
             pytest \
             pytest-asyncio
 
