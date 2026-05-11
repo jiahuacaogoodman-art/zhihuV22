@@ -52,6 +52,11 @@
       const box = document.createElement('div'); box.className = 'dialog';
       const title = document.createElement('div'); title.className = 'dialog-title'; title.textContent = opts.title || '提示';
       const body  = document.createElement('div'); body.className = 'dialog-body'; body.textContent = opts.text || '';
+      // alert 常用于展示"新签发的 Token"这种包含换行和长 token 串的内容，
+      // 默认 .dialog-body 会把 \n 折叠成空格，token 会挤成一行没法选中。
+      // 这里只在 alert 里开启 pre-wrap + break-all，保持多行展示且长串能换行。
+      body.style.whiteSpace = 'pre-wrap';
+      body.style.wordBreak = 'break-all';
       const acts  = document.createElement('div'); acts.className = 'dialog-actions';
       const ok = document.createElement('button'); ok.className = 'btn btn-primary'; ok.textContent = opts.confirmText || '知道了';
       acts.append(ok);
@@ -88,14 +93,23 @@
       });
       const acts  = document.createElement('div'); acts.className = 'dialog-actions';
       const cancel = document.createElement('button'); cancel.type='button'; cancel.className = 'btn btn-ghost'; cancel.textContent = opts.cancelText || '取消';
-      const ok = document.createElement('button'); ok.type='submit'; ok.className = 'btn btn-primary'; ok.textContent = opts.confirmText || '确定';
+      // 注意：ok 按钮放在 <form> 外面（acts 是 form 的兄弟节点），所以 type="submit" 不会
+      // 触发 form 的提交——这是之前"签发 Token 对话框点确定没反应"的根因。
+      // 这里同时绑 onclick 作为兜底：Enter 键走 form.onsubmit，点按钮走 onclick，两条路汇总到 submit()。
+      const ok = document.createElement('button'); ok.type='button'; ok.className = 'btn btn-primary'; ok.textContent = opts.confirmText || '确定';
       acts.append(cancel, ok);
       box.append(title, form, acts);
       ov.append(box);
       document.body.appendChild(ov);
       const done = (v)=>{ close(ov); resolve(v); };
+      const submit = ()=>{
+        const out = {};
+        fields.forEach(f=>{ out[f.id] = document.getElementById('_dlg_'+f.id).value.trim(); });
+        done(out);
+      };
       cancel.onclick = ()=>done(null);
-      form.onsubmit = (e)=>{ e.preventDefault(); const out = {}; fields.forEach(f=>{ out[f.id] = document.getElementById('_dlg_'+f.id).value.trim(); }); done(out); };
+      ok.onclick = submit;
+      form.onsubmit = (e)=>{ e.preventDefault(); submit(); };
       ov.addEventListener('click', e=>{ if(e.target===ov) done(null); });
     });
   }
