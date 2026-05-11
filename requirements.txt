@@ -24,7 +24,8 @@ requests==2.32.3
 # --- 数据校验（FastAPI 依赖）---
 pydantic==2.10.3
 
-# --- 工具类 ---
+# --- 数据安全 ---
+cryptography==43.0.3       # PII 字段 Fernet 加密（id_card / emergency_phone 等）
 python-multipart==0.0.20   # 支持 multipart/form-data
 python-dotenv==1.0.1       # 环境变量管理
 loguru==0.7.3              # 结构化日志
