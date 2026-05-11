@@ -485,11 +485,17 @@ from typing import Optional
 
 from app.core.config import BASE_DIR
 from app.models.schemas import TaskCardGenerateRequest, TaskCompleteRequest, EventObservationRequest
+from app.services.event_store import EventStore
 from app.services.protocol_loader import get_protocols
 
-EVENT_STORE_DIR = Path(BASE_DIR) / "local_nursing_events"
-EVENT_STORE_DIR.mkdir(parents=True, exist_ok=True)
-EVENT_STORE_FILE = EVENT_STORE_DIR / "events.json"
+# ── 护理事件持久化（SQLite，替代原 events.json 全量覆写方案）──────────────
+# EventStore 在模块加载时初始化一次；首次启动会自动把旧 events.json 迁移过来。
+_EVENT_STORE_DIR = Path(BASE_DIR) / "local_nursing_events"
+_EVENT_STORE_DIR.mkdir(parents=True, exist_ok=True)
+_event_store = EventStore(
+    db_path=_EVENT_STORE_DIR / "events.db",
+    legacy_json=_EVENT_STORE_DIR / "events.json",   # 存在则自动迁移后重命名为 .bak
+)
 
 RISK_META = {
     "red": {"label": "红色预警", "title": "高危事件", "color": "#ef4444"},
@@ -505,34 +511,18 @@ def _now_str() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
-def _load_events() -> list:
-    if not EVENT_STORE_FILE.exists():
-        return []
-    try:
-        return json.loads(EVENT_STORE_FILE.read_text(encoding="utf-8"))
-    except Exception:
-        return []
-
-
-def _save_events(events: list) -> None:
-    EVENT_STORE_FILE.write_text(json.dumps(events, ensure_ascii=False, indent=2), encoding="utf-8")
-
-
 def _get_event_or_404(event_id: str) -> dict:
-    for event in _load_events():
-        if event.get("event_id") == event_id:
-            return event
-    raise HTTPException(status_code=404, detail="未找到该护理事件")
+    event = _event_store.get_event(event_id)
+    if event is None:
+        raise HTTPException(status_code=404, detail="未找到该护理事件")
+    return event
 
 
 def _update_event(event_id: str, updater) -> dict:
-    events = _load_events()
-    for idx, event in enumerate(events):
-        if event.get("event_id") == event_id:
-            events[idx] = updater(event)
-            _save_events(events)
-            return events[idx]
-    raise HTTPException(status_code=404, detail="未找到该护理事件")
+    try:
+        return _event_store.update_event(event_id, updater)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="未找到该护理事件")
 
 
 def _norm_text(text: str) -> str:
@@ -983,9 +973,7 @@ async def generate_task_card(payload: TaskCardGenerateRequest):
         raise HTTPException(status_code=500, detail=f"档案检索失败: {str(e)}")
 
     task_card = _build_ai_task_card(payload, context)
-    events = _load_events()
-    events.append(task_card)
-    _save_events(events)
+    _event_store.save_event(task_card)
 
     # 任务卡也算一次 AI 决策，写入决策记忆（L4 闭环）
     try:
@@ -1018,12 +1006,7 @@ async def generate_task_card(payload: TaskCardGenerateRequest):
 
 @router.get("/nursing/events", summary="查询护理事件列表")
 async def list_nursing_events(patient_id: Optional[str] = None, status_filter: Optional[str] = None):
-    events = _load_events()
-    if patient_id:
-        events = [e for e in events if e.get("patient_id") == patient_id]
-    if status_filter:
-        events = [e for e in events if e.get("status") == status_filter]
-    events.sort(key=lambda e: e.get("created_at", ""), reverse=True)
+    events = _event_store.load_events(patient_id=patient_id, status_filter=status_filter)
     return {"code": 200, "total": len(events), "events": events}
 
 
