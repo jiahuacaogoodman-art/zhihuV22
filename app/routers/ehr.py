@@ -12,12 +12,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import APIRouter, Body, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, UploadFile, status
 from loguru import logger
 
 from app.core.config import EHR_UPLOAD_DIR, MAX_UPLOAD_SIZE_MB, ALLOWED_UPLOAD_EXTENSIONS, BASE_DIR
+from app.middleware.auth import get_current_user, require_admin
 from app.services.audit_log import AuditLog, _diff_meta
 from app.services.pii_crypto import encrypt_pii_fields, decrypt_pii_fields
+from app.services.user_store import User
 from app.models.schemas import (
     EHRAddRequest, EHRAddResponse,
     EHRUpdateRequest, EHRUpdateResponse,
@@ -215,10 +217,10 @@ def _add_document_to_collection(collection, embedding_function, doc_id: str, doc
 
 # ── 旧版兼容：录入档案 ───────────────────────────────────────────
 @router.post("/ehr/add", response_model=EHRAddResponse, summary="录入老人 EHR 档案")
-async def add_ehr(payload: EHRAddRequest):
+async def add_ehr(payload: EHRAddRequest, user: User = Depends(get_current_user)):
     collection, embedding_function = _get_state()
     doc_id = f"{payload.patient_id}_{uuid.uuid4().hex[:8]}"
-    logger.info(f"录入档案: patient_id={payload.patient_id}, doc_id={doc_id}")
+    logger.info(f"录入档案: patient_id={payload.patient_id}, doc_id={doc_id}, operator={user.username}")
 
     payload_dict = payload.model_dump()
     payload_dict["doc_type"] = PROFILE_DOC_TYPE
@@ -228,7 +230,7 @@ async def add_ehr(payload: EHRAddRequest):
     try:
         _add_document_to_collection(collection, embedding_function, doc_id, document, metadata)
         logger.success(f"档案录入成功: doc_id={doc_id}")
-        audit.log("PATIENT_CREATE", payload.patient_id, "api",
+        audit.log("PATIENT_CREATE", payload.patient_id, user.username,
                   doc_id=doc_id, detail=f"新建患者档案: {payload.name}")
         return EHRAddResponse(
             code=200,
@@ -243,8 +245,8 @@ async def add_ehr(payload: EHRAddRequest):
 
 # ── 新版 REST：前端页面使用 ──────────────────────────────────────
 @router.post("/ehr/patients", summary="新增患者基本档案")
-async def create_patient(payload: EHRAddRequest):
-    return await add_ehr(payload)
+async def create_patient(payload: EHRAddRequest, user: User = Depends(get_current_user)):
+    return await add_ehr(payload, user=user)
 
 
 @router.get("/ehr/patients", summary="查询患者基本档案列表")
@@ -275,15 +277,19 @@ async def get_patient(patient_id: str):
 
 
 @router.put("/ehr/patients/{patient_id}", summary="修改患者基本档案")
-async def update_patient(patient_id: str, payload: dict = Body(...)):
+async def update_patient(
+    patient_id: str,
+    payload: dict = Body(...),
+    user: User = Depends(get_current_user),
+):
     payload["patient_id"] = patient_id
     req = EHRUpdateRequest(**payload)
-    return await update_ehr(req)
+    return await update_ehr(req, user=user)
 
 
 @router.delete("/ehr/patients/{patient_id}", summary="删除患者全部档案")
-async def delete_patient(patient_id: str):
-    return await delete_ehr(EHRDeleteRequest(patient_id=patient_id))
+async def delete_patient(patient_id: str, user: User = Depends(get_current_user)):
+    return await delete_ehr(EHRDeleteRequest(patient_id=patient_id), user=user)
 
 
 # ── 旧版兼容：查询所有基本档案 ───────────────────────────────────
@@ -296,7 +302,7 @@ async def list_ehr():
 
 # ── 旧版兼容：修改基本档案 ───────────────────────────────────────
 @router.post("/ehr/update", response_model=EHRUpdateResponse, summary="修改患者档案")
-async def update_ehr(payload: EHRUpdateRequest):
+async def update_ehr(payload: EHRUpdateRequest, user: User = Depends(get_current_user)):
     collection, embedding_function = _get_state()
     try:
         result = collection.get(where={"patient_id": {"$eq": payload.patient_id}}, include=["documents", "metadatas"])
@@ -330,9 +336,9 @@ async def update_ehr(payload: EHRUpdateRequest):
         collection.delete(ids=existing_ids)
         new_doc_id = f"{payload.patient_id}_{uuid.uuid4().hex[:8]}"
         _add_document_to_collection(collection, embedding_function, new_doc_id, new_document, new_metadata)
-        logger.success(f"档案修改成功: patient_id={payload.patient_id}")
+        logger.success(f"档案修改成功: patient_id={payload.patient_id}, operator={user.username}")
         diff = _diff_meta(old_meta, merged, list(merged.keys()))
-        audit.log("PATIENT_UPDATE", payload.patient_id, "api",
+        audit.log("PATIENT_UPDATE", payload.patient_id, user.username,
                   doc_id=new_doc_id, detail=f"修改患者档案: {merged.get('name', '')}",
                   diff=diff)
         return EHRUpdateResponse(
@@ -357,6 +363,7 @@ async def upload_medical_records(
     notes: Optional[str] = Form(None),
     manual_text: Optional[str] = Form(None),
     files: List[UploadFile] = File(...),
+    user: User = Depends(get_current_user),
 ):
     collection, embedding_function = _get_state()
     if not files:
@@ -433,9 +440,9 @@ async def upload_medical_records(
             "uploaded_at": uploaded_at,
         })
 
-    logger.success(f"病历照片上传完成: patient_id={patient_id}, count={len(saved)}")
+    logger.success(f"病历照片上传完成: patient_id={patient_id}, count={len(saved)}, operator={user.username}")
     for rec in saved:
-        audit.log("RECORD_UPLOAD", patient_id, "api",
+        audit.log("RECORD_UPLOAD", patient_id, user.username,
                   doc_id=rec["doc_id"],
                   detail=f"上传病历照片: {rec['original_filename']} (ocr={rec['ocr_status']})")
     return {"code": 200, "message": f"已上传 {len(saved)} 份病历照片，并同步保存原图与 OCR 文本", "records": saved}
@@ -477,7 +484,7 @@ async def list_medical_records(patient_id: str):
 
 
 @router.delete("/ehr/records/{doc_id}", summary="删除单份病历照片档案")
-async def delete_medical_record(doc_id: str):
+async def delete_medical_record(doc_id: str, user: User = Depends(get_current_user)):
     collection, _ = _get_state()
     result = collection.get(ids=[doc_id], include=["metadatas"])
     ids = result.get("ids", [])
@@ -492,7 +499,7 @@ async def delete_medical_record(doc_id: str):
         if p:
             Path(p).unlink(missing_ok=True)
     collection.delete(ids=[doc_id])
-    audit.log("RECORD_DELETE", meta.get("patient_id", ""), "api",
+    audit.log("RECORD_DELETE", meta.get("patient_id", ""), user.username,
               doc_id=doc_id,
               detail=f"删除病历照片: {meta.get('original_filename', '')}")
     return {"code": 200, "message": "病历照片档案已删除", "doc_id": doc_id}
@@ -500,7 +507,7 @@ async def delete_medical_record(doc_id: str):
 
 # ── 旧版兼容：删除患者全部档案 ───────────────────────────────────
 @router.post("/ehr/delete", response_model=EHRDeleteResponse, summary="删除患者档案")
-async def delete_ehr(payload: EHRDeleteRequest):
+async def delete_ehr(payload: EHRDeleteRequest, user: User = Depends(get_current_user)):
     collection, _ = _get_state()
     try:
         result = collection.get(where={"patient_id": {"$eq": payload.patient_id}}, include=["metadatas"])
@@ -514,8 +521,8 @@ async def delete_ehr(payload: EHRDeleteRequest):
             shutil.rmtree(patient_dir, ignore_errors=True)
 
         collection.delete(ids=existing_ids)
-        logger.success(f"档案删除成功: patient_id={payload.patient_id}, 删除 {len(existing_ids)} 条")
-        audit.log("PATIENT_DELETE", payload.patient_id, "api",
+        logger.success(f"档案删除成功: patient_id={payload.patient_id}, 删除 {len(existing_ids)} 条, operator={user.username}")
+        audit.log("PATIENT_DELETE", payload.patient_id, user.username,
                   detail=f"删除患者全部档案，共 {len(existing_ids)} 条记录")
         return EHRDeleteResponse(
             code=200,
@@ -532,11 +539,12 @@ async def delete_ehr(payload: EHRDeleteRequest):
 
 
 # ── 操作审计日志查询 ─────────────────────────────────────────────
-@router.get("/ehr/audit", summary="查询操作审计日志")
+@router.get("/ehr/audit", summary="查询操作审计日志（admin 专属）")
 async def get_audit_log(
     patient_id: Optional[str] = None,
     action: Optional[str] = None,
     limit: int = 100,
+    _admin: User = Depends(require_admin),
 ):
     """
     返回档案操作审计记录（按时间倒序）。
