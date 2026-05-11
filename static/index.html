@@ -570,7 +570,15 @@
     <button class="nav-tab" data-tab="archive"><span class="icon-s" data-icon="upload"></span>病历上传</button>
     <button class="nav-tab" data-tab="dec"><span class="icon-s" data-icon="sparkles"></span>AI 护理建议</button>
     <button class="nav-tab" data-tab="hist"><span class="icon-s" data-icon="history"></span>操作记录</button>
+    <button class="nav-tab" data-tab="audit"><span class="icon-s" data-icon="shield"></span>审计日志</button>
+    <button class="nav-tab" data-tab="users"><span class="icon-s" data-icon="key"></span>用户管理</button>
   </nav>
+
+  <div class="section-hint">认证</div>
+  <div style="padding:0 4px;">
+    <input id="tokenInput" class="field" style="font-size:12px;height:34px;padding:0 8px;" placeholder="粘贴 API Token" oninput="setToken(this.value)">
+    <div id="authStatus" style="font-size:11px;color:rgba(226,232,240,0.5);margin-top:4px;padding:0 2px;"></div>
+  </div>
 
   <div class="sidebar-spacer"></div>
 
@@ -836,6 +844,45 @@
     <div id="historyList" class="hist-list"><div class="empty"><span class="empty-icon" data-icon="history"></span><div class="empty-title">暂无操作记录</div></div></div>
   </section>
 
+  <!-- 审计日志 -->
+  <section id="tab-audit" class="glass card" style="display:none;">
+    <div class="card-head with-tools">
+      <div class="card-head-icon"><span class="icon" data-icon="shield"></span></div>
+      <div class="card-head-text"><h2>审计日志</h2><p>全部档案写操作留痕（admin 可查）</p></div>
+      <div class="tools">
+        <select id="auditAction" class="field" onchange="loadAuditLog()">
+          <option value="">全部操作</option>
+          <option value="PATIENT_CREATE">新建档案</option>
+          <option value="PATIENT_UPDATE">修改档案</option>
+          <option value="PATIENT_DELETE">删除档案</option>
+          <option value="RECORD_UPLOAD">上传病历</option>
+          <option value="RECORD_DELETE">删除病历</option>
+        </select>
+        <input id="auditPatient" class="field" placeholder="按 patient_id 筛选" oninput="loadAuditLog()">
+      </div>
+    </div>
+    <div id="auditList" class="hist-list"><div class="empty"><span class="empty-icon" data-icon="shield"></span><div class="empty-title">加载中…</div></div></div>
+  </section>
+
+  <!-- 用户管理 -->
+  <section id="tab-users" class="glass card" style="display:none;">
+    <div class="card-head">
+      <div class="card-head-icon"><span class="icon" data-icon="key"></span></div>
+      <div class="card-head-text"><h2>用户管理</h2><p>管理系统用户和 API Token（admin 专属）</p></div>
+    </div>
+    <div class="section-label">创建用户</div>
+    <div class="form-grid cols-3">
+      <label class="field-group"><span class="field-label">用户名<span class="req">*</span></span><input id="newUsername" class="field" placeholder="wang_nurse"></label>
+      <label class="field-group"><span class="field-label">显示名</span><input id="newDisplayName" class="field" placeholder="王护士"></label>
+      <label class="field-group"><span class="field-label">角色<span class="req">*</span></span><select id="newRole" class="field"><option value="nurse">nurse</option><option value="caregiver">caregiver</option><option value="admin">admin</option></select></label>
+    </div>
+    <div style="margin-top:var(--sp-3);display:flex;gap:8px;">
+      <button class="btn btn-primary btn-sm" onclick="createUser()"><span class="icon-s" data-icon="plus"></span>创建用户</button>
+    </div>
+    <div class="section-label" style="margin-top:var(--sp-5)">已有用户</div>
+    <div id="userList" class="hist-list"><div class="empty"><span class="empty-icon" data-icon="key"></span><div class="empty-title">加载中…</div></div></div>
+  </section>
+
 </main>
 
 <!-- PWA banner -->
@@ -851,6 +898,23 @@
 </div><!-- /app-shell -->
 
 <script>
+/* ═══════════ AUTH ═══════════ */
+const AUTH_KEY = 'zhyb_auth_token';
+function getToken(){ return localStorage.getItem(AUTH_KEY) || ''; }
+function setToken(t){ localStorage.setItem(AUTH_KEY, t); }
+function authHeaders(extra={}){ 
+  const h = {'Content-Type':'application/json', ...extra};
+  const t = getToken();
+  if(t) h['X-Auth-Token'] = t;
+  return h;
+}
+function authHeadersRaw(extra={}){
+  const h = {...extra};
+  const t = getToken();
+  if(t) h['X-Auth-Token'] = t;
+  return h;
+}
+
 /* ═══════════ STATE ═══════════ */
 let curTab = 'add';
 let allPts = [];
@@ -884,7 +948,7 @@ function animateNumber(id, val){
 /* ═══════════ TABS ═══════════ */
 function switchTab(tab){
   document.querySelectorAll('.nav-tab').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
-  ['add','list','archive','dec','hist'].forEach(t=>{
+  ['add','list','archive','dec','hist','audit','users'].forEach(t=>{
     const el = document.getElementById('tab-'+t);
     if(el) el.style.display = (t===tab ? 'block' : 'none');
   });
@@ -892,8 +956,16 @@ function switchTab(tab){
   if(tab==='list') loadPatients();
   else if(tab==='dec') loadPatients().then(populateSel);
   else if(tab==='archive') loadPatients().then(()=>{ populateArchiveSel(); loadMedicalRecordsForSelected(); });
+  else if(tab==='audit') loadAuditLog();
+  else if(tab==='users') loadUsers();
 }
 document.addEventListener('DOMContentLoaded', ()=>{
+  // Restore token and check auth status
+  const savedToken = getToken();
+  const tokenInput = document.getElementById('tokenInput');
+  if(tokenInput && savedToken) tokenInput.value = savedToken;
+  checkAuth();
+
   document.querySelectorAll('.nav-tab').forEach(b=>{
     b.addEventListener('click', ()=>switchTab(b.dataset.tab));
   });
@@ -943,7 +1015,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     currentEvidencePanel.render([], []);
     currentEvidencePanel.onOutcomeRecord(async (decisionId, status, note)=>{
       const r = await fetch(`/api/nursing/decisions/${encodeURIComponent(decisionId)}/outcome`, {
-        method: 'PATCH', headers:{'Content-Type':'application/json'},
+        method: 'PATCH', headers: authHeaders(),
         body: JSON.stringify({outcome_status: status, note, recorded_by:'管理端'})
       });
       if(!r.ok) throw new Error((await r.json()).detail || '回填失败');
@@ -1013,7 +1085,7 @@ async function submitPatient(){
     notes: gv('notes'),
   };
   try{
-    const r = await fetch('/api/ehr/patients', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data)});
+    const r = await fetch('/api/ehr/patients', {method:'POST', headers: authHeaders(), body: JSON.stringify(data)});
     if(!r.ok) throw new Error((await r.json()).detail || '保存失败');
     toast('档案保存成功','success');
     ['patient_id','name','age','birth_date','id_card','admission_date','emergency_contact','emergency_phone','emergency_relation','height_cm','weight_kg','medical_history','allergy','diet_restriction','notes'].forEach(k=>{ const e=document.getElementById(k); if(e) e.value=''; });
@@ -1030,7 +1102,7 @@ async function loadPatients(){
   const list = document.getElementById('recordList');
   if(list && curTab==='list') list.innerHTML = '<div class="empty"><div class="skel" style="height:60px;margin-bottom:8px"></div><div class="skel" style="height:60px;margin-bottom:8px"></div><div class="skel" style="height:60px"></div></div>';
   try{
-    const r = await fetch('/api/ehr/patients');
+    const r = await fetch('/api/ehr/patients', {headers: authHeadersRaw()});
     const raw = await r.json();
     const data = Array.isArray(raw) ? raw : (raw.records || []);
     allPts = data;
@@ -1091,7 +1163,7 @@ async function delPt(pid, name){
   const ok = await window.ZhDialog.confirm({ title:`删除 ${name}？`, text:'此操作不可撤销，该老人的全部档案、病历照片、识别文字和护理记录都会被删除。', confirmText:'确认删除', danger: true });
   if(!ok) return;
   try{
-    const r = await fetch(`/api/ehr/patients/${encodeURIComponent(pid)}`, {method:'DELETE'});
+    const r = await fetch(`/api/ehr/patients/${encodeURIComponent(pid)}`, {method:'DELETE', headers: authHeadersRaw()});
     if(!r.ok) throw new Error('删除失败');
     toast(`已删除 ${name}`,'success');
     addHist('delete', `删除档案：${name}（${pid}）`);
@@ -1102,7 +1174,7 @@ async function delPt(pid, name){
 /* ═══════════ 编辑 ═══════════ */
 async function openEdit(pid){
   try{
-    const r = await fetch(`/api/ehr/patients/${encodeURIComponent(pid)}`);
+    const r = await fetch(`/api/ehr/patients/${encodeURIComponent(pid)}`, {headers: authHeadersRaw()});
     const p = await r.json();
     const vals = await window.ZhDialog.prompt({
       title: `编辑：${p.name || pid}`, confirmText:'保存',
@@ -1119,7 +1191,7 @@ async function openEdit(pid){
     const payload = {};
     Object.keys(vals).forEach(k=>{ if(vals[k] !== '') payload[k] = vals[k]; });
     if(payload.age !== undefined) payload.age = parseInt(payload.age) || null;
-    const r2 = await fetch(`/api/ehr/patients/${encodeURIComponent(pid)}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+    const r2 = await fetch(`/api/ehr/patients/${encodeURIComponent(pid)}`, {method:'PUT', headers: authHeaders(), body: JSON.stringify(payload)});
     if(!r2.ok) throw new Error('保存失败');
     toast('修改已保存','success');
     addHist('edit', `编辑档案：${vals.name||pid}`);
@@ -1164,7 +1236,7 @@ async function uploadMedicalRecords(){
   const btn = document.getElementById('uploadBtn'), txt = document.getElementById('uploadTxt');
   btn.disabled = true; txt.innerHTML = '<span class="ring"></span> 上传并识别中…';
   try{
-    const r = await fetch('/api/ehr/records/upload', {method:'POST', body: fd});
+    const r = await fetch('/api/ehr/records/upload', {method:'POST', headers: authHeadersRaw(), body: fd});
     const d = await r.json();
     if(!r.ok) throw new Error(d.detail || '上传失败');
     const warn = (d.records||[]).some(x=>x.ocr_status !== 'ocr_success');
@@ -1182,7 +1254,7 @@ async function loadMedicalRecords(pid){
   if(!box || !pid) return;
   box.innerHTML = '<div class="empty"><div class="skel" style="height:180px"></div></div>';
   try{
-    const r = await fetch(`/api/ehr/records/${encodeURIComponent(pid)}`);
+    const r = await fetch(`/api/ehr/records/${encodeURIComponent(pid)}`, {headers: authHeadersRaw()});
     const d = await r.json();
     if(!r.ok) throw new Error(d.detail || '读取失败');
     renderMedicalRecords(d.records || [], pid);
@@ -1236,7 +1308,7 @@ async function deleteMedicalRecord(docId, pid){
   const ok = await window.ZhDialog.confirm({ title:'删除这份病历？', text:'原图、识别文字和 AI 记忆都会一并删除', confirmText:'确认删除', danger: true });
   if(!ok) return;
   try{
-    const r = await fetch(`/api/ehr/records/${encodeURIComponent(docId)}`, {method:'DELETE'});
+    const r = await fetch(`/api/ehr/records/${encodeURIComponent(docId)}`, {method:'DELETE', headers: authHeadersRaw()});
     const d = await r.json();
     if(!r.ok) throw new Error(d.detail || '删除失败');
     toast('病历已删除','success');
@@ -1270,7 +1342,7 @@ function addSymptom(s){
 }
 async function refreshMemory(pid){
   try{
-    const r = await fetch(`/api/nursing/decisions?patient_id=${encodeURIComponent(pid)}&limit=5&days=30`);
+    const r = await fetch(`/api/nursing/decisions?patient_id=${encodeURIComponent(pid)}&limit=5&days=30`, {headers: authHeadersRaw()});
     if(!r.ok) return;
     const d = await r.json();
     const prev = currentEvidencePanel?.evidence || [];
@@ -1303,7 +1375,7 @@ async function submitDecision(){
 
 async function streamDecision(pid, symptom){
   const res = await fetch('/api/nursing/decision/stream', {
-    method:'POST', headers:{'Content-Type':'application/json'},
+    method:'POST', headers: authHeaders(),
     body: JSON.stringify({patient_id: pid, symptom, n_results: 5})
   });
   if(!res.ok) throw new Error('stream failed');
@@ -1350,7 +1422,7 @@ async function streamDecision(pid, symptom){
   }
 }
 async function fallbackDecision(pid, symptom){
-  const res = await fetch('/api/nursing/decision', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({patient_id:pid, symptom, n_results:5})});
+  const res = await fetch('/api/nursing/decision', {method:'POST', headers: authHeaders(), body: JSON.stringify({patient_id:pid, symptom, n_results:5})});
   if(!res.ok) throw new Error('请求失败');
   const d = await res.json();
   document.getElementById('adviceWrap').style.display = 'block';
@@ -1391,6 +1463,119 @@ function renderHist(){
   if(window.ZhIcons) window.ZhIcons.mount(el);
 }
 function clearHistory(){ histLog = []; renderHist(); toast('操作记录已清空','info'); }
+
+/* ═══════════ AUTH CHECK ═══════════ */
+async function checkAuth(){
+  const st = document.getElementById('authStatus');
+  const t = getToken();
+  if(!t){ if(st) st.textContent = '未登录（部分功能受限）'; return; }
+  try{
+    const r = await fetch('/api/auth/me', {headers: authHeadersRaw()});
+    if(r.ok){
+      const d = await r.json();
+      if(st) st.innerHTML = `<span style="color:#5eead4">●</span> ${d.username} (${d.role})`;
+    } else {
+      if(st) st.textContent = 'Token 无效';
+    }
+  }catch(e){ if(st) st.textContent = '连接失败'; }
+}
+
+/* ═══════════ 审计日志 ═══════════ */
+async function loadAuditLog(){
+  const el = document.getElementById('auditList');
+  const action = document.getElementById('auditAction')?.value || '';
+  const pid = document.getElementById('auditPatient')?.value?.trim() || '';
+  let url = '/api/ehr/audit?limit=100';
+  if(action) url += `&action=${encodeURIComponent(action)}`;
+  if(pid) url += `&patient_id=${encodeURIComponent(pid)}`;
+  try{
+    const r = await fetch(url, {headers: authHeadersRaw()});
+    if(r.status === 403 || r.status === 401){
+      el.innerHTML = '<div class="empty"><span class="empty-icon" data-icon="shield"></span><div class="empty-title">需要 admin 权限</div><div class="empty-sub">请在左侧填入管理员 Token</div></div>';
+      if(window.ZhIcons) window.ZhIcons.mount(el); return;
+    }
+    if(!r.ok) throw new Error('加载失败');
+    const d = await r.json();
+    const records = d.records || [];
+    if(!records.length){
+      el.innerHTML = '<div class="empty"><span class="empty-icon" data-icon="shield"></span><div class="empty-title">暂无审计记录</div></div>';
+      if(window.ZhIcons) window.ZhIcons.mount(el); return;
+    }
+    el.innerHTML = records.map(r => `
+      <div class="hist-row">
+        <span class="hist-dot" style="background:${r.action?.includes('DELETE')?'#ef4444':'var(--accent)'}"></span>
+        <span class="body-s">
+          <strong>${esc(r.action)}</strong> · ${esc(r.patient_id)} · 操作者：${esc(r.operator)}
+          ${r.detail ? '<br><span class="meta">'+esc(r.detail)+'</span>' : ''}
+          ${r.diff && Object.keys(r.diff).length ? '<br><span class="meta" style="color:var(--ink-4)">变更：'+esc(JSON.stringify(r.diff).slice(0,120))+'</span>' : ''}
+        </span>
+        <span class="meta">${esc(r.ts)}</span>
+      </div>`).join('');
+    if(window.ZhIcons) window.ZhIcons.mount(el);
+  }catch(e){
+    el.innerHTML = `<div class="empty"><span class="empty-icon" data-icon="alert"></span><div class="empty-title">${esc(e.message)}</div></div>`;
+    if(window.ZhIcons) window.ZhIcons.mount(el);
+  }
+}
+
+/* ═══════════ 用户管理 ═══════════ */
+async function loadUsers(){
+  const el = document.getElementById('userList');
+  try{
+    const r = await fetch('/api/auth/users', {headers: authHeadersRaw()});
+    if(r.status === 403 || r.status === 401){
+      el.innerHTML = '<div class="empty"><span class="empty-icon" data-icon="key"></span><div class="empty-title">需要 admin 权限</div></div>';
+      if(window.ZhIcons) window.ZhIcons.mount(el); return;
+    }
+    if(!r.ok) throw new Error('加载失败');
+    const d = await r.json();
+    const users = d.users || d || [];
+    if(!users.length){
+      el.innerHTML = '<div class="empty"><div class="empty-title">暂无用户</div></div>'; return;
+    }
+    el.innerHTML = users.map(u => `
+      <div class="hist-row">
+        <span class="hist-dot" style="background:${u.role==='admin'?'#f59e0b':u.role==='nurse'?'#14b8a6':'#818cf8'}"></span>
+        <span class="body-s">
+          <strong>${esc(u.username)}</strong>${u.display_name?' · '+esc(u.display_name):''}
+          <span class="chip ${u.role==='admin'?'chip-amber':u.role==='nurse'?'chip-green':'chip-blue'}" style="margin-left:6px">${esc(u.role)}</span>
+          ${u.active===false?'<span class="chip chip-red" style="margin-left:4px">已停用</span>':''}
+        </span>
+        <span class="meta">
+          <button class="btn btn-ghost btn-sm" onclick="issueToken('${esc(u.user_id)}','${esc(u.username)}')"><span class="icon-s" data-icon="key"></span>签发 Token</button>
+        </span>
+      </div>`).join('');
+    if(window.ZhIcons) window.ZhIcons.mount(el);
+  }catch(e){
+    el.innerHTML = `<div class="empty"><div class="empty-title">${esc(e.message)}</div></div>`;
+  }
+}
+async function createUser(){
+  const username = document.getElementById('newUsername')?.value?.trim();
+  const display_name = document.getElementById('newDisplayName')?.value?.trim() || '';
+  const role = document.getElementById('newRole')?.value || 'nurse';
+  if(!username){ toast('用户名不能为空','warning'); return; }
+  try{
+    const r = await fetch('/api/auth/users', {method:'POST', headers: authHeaders(), body: JSON.stringify({username, display_name, role})});
+    if(!r.ok){ const d = await r.json(); throw new Error(d.detail || '创建失败'); }
+    toast(`用户 ${username} 创建成功`,'success');
+    document.getElementById('newUsername').value = '';
+    document.getElementById('newDisplayName').value = '';
+    loadUsers();
+  }catch(e){ toast(e.message,'error'); }
+}
+async function issueToken(userId, username){
+  const label = await window.ZhDialog?.prompt?.({title:`为 ${username} 签发 Token`, fields:[{id:'label',label:'标签',value:'默认'}]});
+  if(!label) return;
+  try{
+    const r = await fetch('/api/auth/tokens', {method:'POST', headers: authHeaders(), body: JSON.stringify({user_id: userId, label: label.label || '默认'})});
+    if(!r.ok){ const d = await r.json(); throw new Error(d.detail || '签发失败'); }
+    const d = await r.json();
+    const token = d.token || d.plain_token || '';
+    await window.ZhDialog?.alert?.({title:'Token 已签发', text:`请立即保存，此后不再显示：\n\n${token}`});
+    toast('Token 已签发','success');
+  }catch(e){ toast(e.message,'error'); }
+}
 
 /* ═══════════ PWA ═══════════ */
 if('serviceWorker' in navigator){ navigator.serviceWorker.register('/static/sw.js').catch(()=>{}); }
@@ -1445,7 +1630,7 @@ switchTab = function(t){
   _origSwitchTab(t);
   if(window.ZhPet){
     // 根据 tab 给宠物不同反应
-    const map = { add: 'idle', list: 'idle', archive: 'idle', dec: 'talk', hist: 'idle' };
+    const map = { add: 'idle', list: 'idle', archive: 'idle', dec: 'talk', hist: 'idle', audit: 'idle', users: 'idle' };
     const act = map[t];
     if(act === 'talk') window.ZhPet.say('准备好帮你写护理建议啦～', { title: '提示', duration: 2200 });
     else window.ZhPet.react('jump');
