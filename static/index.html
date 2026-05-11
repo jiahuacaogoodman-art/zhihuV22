@@ -595,75 +595,23 @@
 
 <div class="page">
 
-<!-- ═════════ HERO ═════════ -->
-<section class="hero">
-  <div class="hero-inner">
-    <div data-aos="fade-right" data-aos-duration="800">
-      <span class="hero-kicker"><i class="fa-solid fa-shield-halved" style="color:var(--accent-ink);margin-right:4px"></i>本地离线运行 · 数据不出院</span>
-      <h1 class="hero-title">智护银伴<br><span id="typedHero" class="typed-out"></span></h1>
-      <p class="hero-sub">结合老人的档案、病历和过往护理记录，自动给出可落地的护理建议。每条建议都能看到来源，之前怎么处理、效果如何，下次会继续参考。</p>
-      <div class="hero-actions">
-        <button class="btn btn-primary" onclick="switchTab('dec')"><i class="fa-solid fa-wand-magic-sparkles" style="margin-right:2px"></i>写一次护理建议</button>
-        <button class="btn btn-outline" onclick="switchTab('list')"><i class="fa-solid fa-user-group" style="margin-right:2px"></i>查看老人档案</button>
-        <button class="btn btn-ghost" onclick="window.ZhPet && window.ZhPet.react('greet')" title="唤出小助手"><i class="fa-solid fa-paw" style="margin-right:2px;color:var(--accent)"></i>Hi，银伴</button>
+<!-- ═════════ HERO（轻量版：不依赖 CDN，离线秒加载）═════════ -->
+<section class="hero" style="padding:var(--sp-4) var(--sp-5) var(--sp-3);">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--sp-4);max-width:1200px;margin:0 auto;">
+    <!-- 左：标题 + 快捷入口 -->
+    <div style="min-width:0;">
+      <h1 style="font:600 28px/1.3 var(--font-display);color:var(--ink-1);margin:0;">智护银伴</h1>
+      <p style="font:400 14px/1.6 var(--font-ui);color:var(--ink-3);margin:6px 0 12px;">本地离线运行 · 数据不出院 · AI 护理辅助</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-primary btn-sm" onclick="switchTab('dec')"><i class="fa-solid fa-wand-magic-sparkles" style="margin-right:4px"></i>AI 护理建议</button>
+        <button class="btn btn-outline btn-sm" onclick="switchTab('add')"><i class="fa-solid fa-plus" style="margin-right:4px"></i>录入档案</button>
+        <button class="btn btn-ghost btn-sm" onclick="switchTab('list')"><i class="fa-solid fa-user-group" style="margin-right:4px"></i>档案列表</button>
       </div>
     </div>
-    <div class="glass hero-panel" data-aos="fade-left" data-aos-duration="800" data-aos-delay="120">
-      <!-- Lottie 矢量动画（外部资源，CDN 加载；离线时 CSS 降级） -->
-      <div class="hero-lottie" aria-hidden="true">
-        <lottie-player
-          id="heroLottie"
-          background="transparent"
-          speed="1"
-          loop
-          autoplay
-          src="https://lottie.host/4d0d0e50-6fbf-4b28-a5a1-1c8c6b0e7bfd/Uy8hYcgtDl.json">
-        </lottie-player>
-      </div>
-      <div class="hero-panel-title label"><i class="fa-solid fa-layer-group" style="margin-right:6px"></i>系统概览</div>
-      <div class="stat-grid">
-        <div class="stat"><div class="stat-num" id="statTotal" data-target="0">0</div><div class="stat-lbl">老人档案</div></div>
-        <div class="stat"><div class="stat-num" id="statDec"   data-target="0">0</div><div class="stat-lbl">今日 AI 建议</div></div>
-        <div class="stat"><div class="stat-num" id="statTime">—</div><div class="stat-lbl">响应时间</div></div>
-      </div>
-      <div class="hero-lead">
-        <div class="label" style="color:var(--accent-ink)">AI 会记住历史决策</div>
-        <div class="body-s">最近 7 天对类似症状给出过的建议和效果，下次会自动参考，避免重复判断。</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- 能力展示三栏 -->
-  <div class="container feature-grid">
-    <div class="glass feature-card" data-aos="fade-up" data-aos-duration="700">
-      <div class="feature-icon"><i class="fa-solid fa-database"></i></div>
-      <div class="feature-title">本地 RAG 档案库</div>
-      <div class="feature-desc">老人档案、病历照片、OCR 文本、既往决策全部在本地 ChromaDB，混合检索 + RRF 融合，召回精准又可解释。</div>
-      <div class="feature-tags">
-        <span class="chip chip-accent">BGE 向量</span>
-        <span class="chip chip-blue">BM25 稀疏</span>
-        <span class="chip chip-green">离线可用</span>
-      </div>
-    </div>
-    <div class="glass feature-card alt" data-aos="fade-up" data-aos-duration="700" data-aos-delay="100">
-      <div class="feature-icon"><i class="fa-solid fa-brain"></i></div>
-      <div class="feature-title">本地 LLM 护理建议</div>
-      <div class="feature-desc">Ollama + huatuo-o1 生成建议，流式 SSE 返回，每条意见都能追溯到证据 E1…En，给护理人员留一份判断依据。</div>
-      <div class="feature-tags">
-        <span class="chip chip-accent">SSE 流式</span>
-        <span class="chip chip-blue">证据溯源</span>
-        <span class="chip chip-amber">结构化输出</span>
-      </div>
-    </div>
-    <div class="glass feature-card warm" data-aos="fade-up" data-aos-duration="700" data-aos-delay="200">
-      <div class="feature-icon"><i class="fa-solid fa-heart-pulse"></i></div>
-      <div class="feature-title">闭环决策记忆</div>
-      <div class="feature-desc">每次 AI 建议都可回填效果（有效 / 部分 / 无效），历史处理方式会作为经验被下一次推理参考，越用越懂这家院。</div>
-      <div class="feature-tags">
-        <span class="chip chip-green">效果回填</span>
-        <span class="chip chip-accent">经验沉淀</span>
-        <span class="chip chip-blue">SBAR 交接</span>
-      </div>
+    <!-- 右：在院人数大字 -->
+    <div class="glass" style="padding:var(--sp-3) var(--sp-5);text-align:center;border-radius:var(--r-m);min-width:140px;">
+      <div id="statTotal" style="font:700 42px/1 var(--font-display);color:var(--accent);letter-spacing:-0.02em;">—</div>
+      <div style="font:500 13px/1.4 var(--font-ui);color:var(--ink-3);margin-top:6px;">在院老人</div>
     </div>
   </div>
 </section>
@@ -931,18 +879,7 @@ const nv = id => { const v = parseFloat(document.getElementById(id)?.value); ret
 function animateNumber(id, val){
   const el = document.getElementById(id);
   if(!el) return;
-  const target = parseInt(val) || 0;
-  el.dataset.target = target;
-  if(window.gsap){
-    const current = parseInt(el.textContent) || 0;
-    const obj = { n: current };
-    window.gsap.to(obj, {
-      n: target, duration: 0.8, ease: 'power2.out',
-      onUpdate: () => { el.textContent = Math.round(obj.n); }
-    });
-  }else{
-    el.textContent = target;
-  }
+  el.textContent = parseInt(val) || 0;
 }
 
 /* ═══════════ TABS ═══════════ */
@@ -1091,7 +1028,6 @@ async function submitPatient(){
     ['patient_id','name','age','birth_date','id_card','admission_date','emergency_contact','emergency_phone','emergency_relation','height_cm','weight_kg','medical_history','allergy','diet_restriction','notes'].forEach(k=>{ const e=document.getElementById(k); if(e) e.value=''; });
     ['gender','blood_type','care_level'].forEach(k=>{ const e=document.getElementById(k); if(e) e.value=''; });
     document.getElementById('statTotal').textContent = (parseInt(document.getElementById('statTotal').textContent)||0)+1;
-    animateNumber('statTotal', parseInt(document.getElementById('statTotal').textContent));
     addHist('add', `录入档案：${name}（${pid}）`);
   }catch(e){ toast(e.message,'error'); }
   finally{ btn.disabled=false; txt.textContent='保存档案'; }
@@ -1362,8 +1298,7 @@ async function submitDecision(){
   try{
     await streamDecision(pid, symptom);
     const elapsed = ((Date.now()-t0)/1000).toFixed(1) + 's';
-    document.getElementById('statTime').textContent = elapsed;
-    decCount++; animateNumber('statDec', decCount);
+    decCount++;
     addHist('decision', `AI 建议：${allPts.find(p=>p.patient_id===pid)?.name||pid} — ${symptom.slice(0,20)}`);
     await refreshMemory(pid);
     if(window.ZhPet) window.ZhPet.react('success', `建议已生成，用时 ${elapsed}`);
@@ -1595,33 +1530,8 @@ window.addEventListener('load', () => {
   if(window.AOS){
     AOS.init({ once: true, duration: 700, easing: 'ease-out-cubic', offset: 60 });
   }
-  // Typed.js：hero 标题打字机
-  if(window.Typed){
-    new Typed('#typedHero', {
-      strings: ['让老人护理 <em>更有依据</em>', '把每一次决定 <em>变成经验</em>', '让每一条建议 <em>可被追溯</em>'],
-      typeSpeed: 55,
-      backSpeed: 28,
-      backDelay: 2400,
-      loop: true,
-      smartBackspace: true,
-      showCursor: false
-    });
-  }
-  // GSAP：hero 动作按钮微动（通过 ZhVendors 懒加载，避免重复引入）
-  const runGsapExtras = () => {
-    if(!window.gsap) return;
-    gsap.from('.hero-actions .btn', {
-      y: 12, opacity: 0, duration: 0.6, stagger: 0.08, ease: 'power2.out', delay: 0.3
-    });
-    gsap.from('.feature-card', {
-      y: 24, opacity: 0, duration: 0.7, stagger: 0.1, ease: 'power3.out', delay: 0.4
-    });
-  };
-  if(window.gsap){
-    runGsapExtras();
-  }else if(window.ZhVendors){
-    window.ZhVendors.load('gsap').then(ok => { if(ok) runGsapExtras(); }).catch(()=>{});
-  }
+  // Typed.js：已移除 hero 打字机（改为静态标题）
+  // GSAP：hero 简化后不再需要入场动画
 });
 
 /* 切换 tab 时也通知宠物：跑一下 */
