@@ -18,7 +18,7 @@ from loguru import logger
 from app.core.config import EHR_UPLOAD_DIR, MAX_UPLOAD_SIZE_MB, ALLOWED_UPLOAD_EXTENSIONS, BASE_DIR
 from app.middleware.auth import get_current_user, require_admin
 from app.services.audit_log import AuditLog, _diff_meta
-from app.services.pii_crypto import encrypt_pii_fields, decrypt_pii_fields
+from app.services.pii_crypto import PII_FIELDS, encrypt_pii_fields, decrypt_pii_fields
 from app.services.user_store import User
 from app.models.schemas import (
     EHRAddRequest, EHRAddResponse,
@@ -319,25 +319,53 @@ async def update_ehr(payload: EHRUpdateRequest, user: User = Depends(get_current
         if not existing_ids:
             raise HTTPException(status_code=404, detail=f"未找到 patient_id='{payload.patient_id}' 的基本档案")
 
-        merged = dict(old_meta)
-        # 从旧文档中保底继承 medical_history，避免编辑其他字段时病史丢失。
-        merged.setdefault("medical_history", old_doc)
+        # 1) 解密旧 meta，让后续 merge / diff / document 构建全程走明文。
+        #    Phase 1B 修复：此前 merged = dict(old_meta) 会把密文直接带入，导致：
+        #      · _build_document 生成含密文的向量化文本（向量库泄密）
+        #      · _diff_meta 对密文做比较（审计日志泄密）
+        old_meta_plain = decrypt_pii_fields(old_meta)
+
+        # 2) 防御：若某 PII 字段在旧数据里是密文但本实例无法解密（密钥缺失/轮换中），
+        #    decrypt 会返回占位符字符串。把占位符当明文写回会污染数据，直接 500。
+        #    （此检查仅对用户未主动覆盖的字段生效——如果用户在本次请求里显式传了
+        #     name=xxx，后面的 merge 会覆盖占位符，无需中止。）
         new_data = payload.model_dump(exclude_unset=True)
         new_data.pop("patient_id", None)
+        _mask_prefixes = ("[加密数据-需配置", "[解密失败")
+        untouched_masked = [
+            f for f in PII_FIELDS
+            if f not in new_data
+            and isinstance(old_meta_plain.get(f), str)
+            and old_meta_plain[f].startswith(_mask_prefixes)
+        ]
+        if untouched_masked:
+            logger.error(
+                f"拒绝修改 patient_id={payload.patient_id}：字段 {untouched_masked} "
+                f"无法解密（可能 PII_ENCRYPTION_KEY 未正确配置），避免把占位符写回数据库"
+            )
+            raise HTTPException(
+                status_code=503,
+                detail="PII 字段无法解密（请检查 PII_ENCRYPTION_KEY 配置），修改已中止",
+            )
+
+        merged = dict(old_meta_plain)
+        # 从旧文档中保底继承 medical_history，避免编辑其他字段时病史丢失。
+        merged.setdefault("medical_history", old_doc)
         for k, v in new_data.items():
             if v is not None:
                 merged[k] = v
 
         merged["patient_id"] = payload.patient_id
         merged["doc_type"] = PROFILE_DOC_TYPE
-        new_document = _build_document(merged)
-        new_metadata = _build_metadata(merged)
+        new_document = _build_document(merged)        # 明文 → 可向量化检索
+        new_metadata = _build_metadata(merged)        # 内部会 encrypt_pii_fields
 
         collection.delete(ids=existing_ids)
         new_doc_id = f"{payload.patient_id}_{uuid.uuid4().hex[:8]}"
         _add_document_to_collection(collection, embedding_function, new_doc_id, new_document, new_metadata)
         logger.success(f"档案修改成功: patient_id={payload.patient_id}, operator={user.username}")
-        diff = _diff_meta(old_meta, merged, list(merged.keys()))
+        # _diff_meta 约定输入明文，PII 字段内部做 mask
+        diff = _diff_meta(old_meta_plain, merged, list(merged.keys()))
         audit.log("PATIENT_UPDATE", payload.patient_id, user.username,
                   doc_id=new_doc_id, detail=f"修改患者档案: {merged.get('name', '')}",
                   diff=diff)

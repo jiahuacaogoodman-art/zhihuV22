@@ -148,15 +148,39 @@ class AuditLog:
 
 def _diff_meta(before: dict, after: dict, fields: list[str]) -> dict:
     """
-    只比较关心的字段，返回 {"before": {...}, "after": {...}} 格式的变更摘要。
-    PII 字段（id_card / emergency_phone 等）以占位符代替，不进审计日志。
+    比较关心的字段，返回 {"before": {...}, "after": {...}} 格式的变更摘要。
+
+    Phase 1B 语义契约（调用方必须遵守）:
+      · `before` 和 `after` 都必须是**明文** dict（调用方在传入前对读自 ChromaDB 的
+        密文做 decrypt_pii_fields）。
+      · 本函数内对 PII 字段做 mask，**不输出** PII 明文，更不会输出密文。
+      · 非 PII 字段（床位号、年龄、病史片段）原样进入 diff，保留审计可读性。
+
+    为什么要把 decrypt 留给调用方：
+      审计日志是"有无变化"的权威来源。如果在本函数里做 decrypt，decrypt 失败
+      会让 diff 误判为"有变化"，污染审计。调用方自己掌控解密时机后，可以
+      选择把解密失败的字段排除在 diff 之外。
+
+    输出示例（PII 字段变化时不泄露具体值）:
+      {"before": {"bed_number": "A1", "name": "[已加密]"},
+       "after":  {"bed_number": "B2", "name": "[已加密]"}}
     """
-    _PII = {"id_card", "emergency_phone", "emergency_contact", "emergency_relation"}
-    b, a = {}, {}
+    # 延迟导入，避免 services/audit_log 硬依赖 services/pii_crypto 的模块加载时序
+    from app.services.pii_crypto import PII_FIELDS
+
+    pii_set = set(PII_FIELDS)
+    b: dict[str, Any] = {}
+    a: dict[str, Any] = {}
     for f in fields:
         bv = before.get(f)
         av = after.get(f)
-        if bv != av:
-            b[f] = "[已加密]" if f in _PII else bv
-            a[f] = "[已加密]" if f in _PII else av
+        if bv == av:
+            continue
+        if f in pii_set:
+            # PII 字段：仅表达"有变化"，不写具体值（无论明文密文都 mask）
+            b[f] = "[已加密]"
+            a[f] = "[已加密]"
+        else:
+            b[f] = bv
+            a[f] = av
     return {"before": b, "after": a} if b or a else {}
