@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "fix/**", "feat/**", "chore/**"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  # ── 冒烟测试（不需要 GPU / Ollama / 真实 Chroma）────────────
+  smoke-test:
+    name: Smoke Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      # 只装轻量依赖，跳过 torch / sentence-transformers（CI 里全部被 stub）
+      - name: Install test dependencies
+        run: |
+          pip install --upgrade pip
+          pip install \
+            fastapi \
+            "uvicorn[standard]" \
+            starlette \
+            pydantic \
+            httpx \
+            python-multipart \
+            loguru \
+            numpy \
+            chromadb \
+            pytest \
+            pytest-asyncio
+
+      - name: Run smoke tests
+        run: pytest -v --tb=short
+
+  # ── Docker 镜像构建验证（不推送）────────────────────────────
+  docker-build:
+    name: Docker Build Check
+    runs-on: ubuntu-latest
+    # 只在推 main 或打 PR 时跑，节省 CI 时间
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image (no push)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          tags: zhihu-yinban:ci
+          # 缓存层，加快后续构建
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
