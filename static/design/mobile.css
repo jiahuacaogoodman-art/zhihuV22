@@ -39,8 +39,7 @@
   .tap-chip{ min-height: 38px; padding: 0 14px; }
   /* 在手机上取消悬浮 translate，避免 sticky hover 状态 */
   .btn:hover:not(:disabled),
-  .tap-chip:hover,
-  .feature-card:hover{ transform: none; }
+  .tap-chip:hover{ transform: none; }
 }
 
 /* ---------- 通用手势 / 视觉 ---------- */
@@ -260,10 +259,6 @@
   .stat{ min-height: 66px; padding: 8px 2px; }
   .stat-num{ font-size: 20px; }
   .hero-actions .btn{ flex: 1 1 100%; }
-  .feature-card{ padding: var(--sp-4); gap: var(--sp-2); }
-  .feature-icon{ width: 40px; height: 40px; font-size: 18px; border-radius: 12px; }
-  .feature-title{ font-size: 16px; }
-  .feature-desc{ font-size: 13px; line-height: 1.6; }
   .card-head-icon{ width: 32px; height: 32px; }
   /* ≤480 只负责再收字号；间距交给上面 ≤960 的规则，不再重写 margin，
      免得又把距离反撑回去。 */
