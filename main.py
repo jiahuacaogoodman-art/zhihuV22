@@ -27,7 +27,7 @@ from app.core.config import (
     EHR_UPLOAD_DIR,
     AUTH_TOKEN,
 )
-from app.middleware.auth import AuthTokenMiddleware
+from app.middleware.auth import AuthTokenMiddleware, ReadAuditMiddleware
 from app.routers import auth as auth_router
 from app.routers import ehr, nursing
 from app.services.pii_crypto import is_encryption_enabled
@@ -147,7 +147,13 @@ app.include_router(nursing.router, prefix="/api", tags=["Nursing Decision Suppor
 #   - user_store：UserStore 已有用户（常态，bootstrap_legacy_admin 之后也是此模式）
 #   - legacy_token：UserStore 为空但 AUTH_TOKEN 非空（极少出现，bootstrap 成功后即脱离）
 #   - disabled：两者都空（仅限开发/测试）
+#
+# 中间件执行顺序（Starlette 栈是 LIFO，后 add 的先跑）：
+#   外层  →  AuthTokenMiddleware    先鉴权，未通过直接 401
+#   内层  →  ReadAuditMiddleware    鉴权通过后，对 /uploads/* 的 2xx 响应记 RECORD_PREVIEW
+# 所以必须**先** add_middleware(ReadAuditMiddleware)，**后** add_middleware(AuthTokenMiddleware)。
 # ----------------------------------------------------------------
+app.add_middleware(ReadAuditMiddleware)
 app.add_middleware(AuthTokenMiddleware, legacy_token=AUTH_TOKEN, user_store=user_store)
 
 # 把 UserStore 和 auth_mode 挂到 app.state，供路由通过 request.app.state 读取，

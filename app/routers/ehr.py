@@ -17,7 +17,7 @@ from loguru import logger
 
 from app.core.config import EHR_UPLOAD_DIR, MAX_UPLOAD_SIZE_MB, ALLOWED_UPLOAD_EXTENSIONS, BASE_DIR
 from app.middleware.auth import get_current_user, require_admin
-from app.services.audit_log import AuditLog, _diff_meta
+from app.services.audit_log import get_audit_log, _diff_meta
 from app.services.pii_crypto import PII_FIELDS, encrypt_pii_fields, decrypt_pii_fields
 from app.services.user_store import User
 from app.models.schemas import (
@@ -31,10 +31,9 @@ from app.services.ocr_service import LocalOCRService
 router = APIRouter()
 ocr_service = LocalOCRService()
 
-# 审计日志（单独 SQLite，与业务库分离）
-_AUDIT_DIR = Path(BASE_DIR) / "local_audit_log"
-_AUDIT_DIR.mkdir(parents=True, exist_ok=True)
-audit = AuditLog(_AUDIT_DIR / "audit.db")
+# 审计日志：全局 singleton，ehr / nursing / ReadAuditMiddleware 共用同一实例
+# 避免多个 sqlite3 连接池争用 WAL 文件，也让测试更容易 reset。
+audit = get_audit_log()
 
 UPLOAD_ROOT = Path(EHR_UPLOAD_DIR)
 UPLOAD_ROOT.mkdir(parents=True, exist_ok=True)
@@ -250,7 +249,7 @@ async def create_patient(payload: EHRAddRequest, user: User = Depends(get_curren
 
 
 @router.get("/ehr/patients", summary="查询患者基本档案列表")
-async def list_patients():
+async def list_patients(user: User = Depends(get_current_user)):
     collection, _ = _get_state()
     result = collection.get(include=["documents", "metadatas"])
     records = []
@@ -263,16 +262,23 @@ async def list_patients():
             continue
         seen.add(pid)
         records.append(_meta_to_record(doc_id, doc, meta).model_dump())
+    # 只读审计：列表查询记 PATIENT_LIST，patient_id 留空，detail 里写条数
+    audit.log("PATIENT_LIST", "", user.username,
+              detail=f"查询患者列表，共返回 {len(records)} 条")
     return records
 
 
 @router.get("/ehr/patients/{patient_id}", summary="查询单个患者基本档案")
-async def get_patient(patient_id: str):
+async def get_patient(patient_id: str, user: User = Depends(get_current_user)):
     collection, _ = _get_state()
     result = collection.get(where={"patient_id": {"$eq": patient_id}}, include=["documents", "metadatas"])
     for doc_id, doc, meta in zip(result.get("ids", []), result.get("documents", []), result.get("metadatas", [])):
         if _is_profile(meta):
-            return _meta_to_record(doc_id, doc, meta).model_dump()
+            record = _meta_to_record(doc_id, doc, meta).model_dump()
+            # 只读审计：查看成功才记录（404 分支不记）
+            audit.log("PATIENT_READ", patient_id, user.username,
+                      doc_id=doc_id, detail=f"查看患者基本档案: {record.get('name', '')} (来源=ehr)")
+            return record
     raise HTTPException(status_code=404, detail=f"未找到 patient_id='{patient_id}' 的患者基本档案")
 
 
@@ -294,8 +300,8 @@ async def delete_patient(patient_id: str, user: User = Depends(get_current_user)
 
 # ── 旧版兼容：查询所有基本档案 ───────────────────────────────────
 @router.get("/ehr/list", response_model=EHRListResponse, summary="查询所有已录入档案")
-async def list_ehr():
-    records = [EHRRecord(**item) for item in await list_patients()]
+async def list_ehr(user: User = Depends(get_current_user)):
+    records = [EHRRecord(**item) for item in await list_patients(user=user)]
     logger.info(f"查询档案列表，共 {len(records)} 条")
     return EHRListResponse(code=200, total=len(records), records=records)
 
@@ -477,7 +483,7 @@ async def upload_medical_records(
 
 
 @router.get("/ehr/records/{patient_id}", summary="查询某患者的病历照片与 OCR 文本")
-async def list_medical_records(patient_id: str):
+async def list_medical_records(patient_id: str, user: User = Depends(get_current_user)):
     collection, _ = _get_state()
     result = collection.get(where={"patient_id": {"$eq": patient_id}}, include=["documents", "metadatas"])
     records = []
@@ -508,6 +514,9 @@ async def list_medical_records(patient_id: str):
             "file_size": meta.get("file_size"),
         })
     records.sort(key=lambda x: x.get("uploaded_at") or "", reverse=True)
+    # 只读审计：查询病历列表
+    audit.log("RECORD_READ", patient_id, user.username,
+              detail=f"查询病历照片列表，共 {len(records)} 份")
     return {"code": 200, "patient_id": patient_id, "total": len(records), "records": records}
 
 

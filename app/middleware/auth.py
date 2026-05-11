@@ -39,6 +39,7 @@ import hmac
 from typing import Optional
 
 from fastapi import Depends, HTTPException, Request, status
+from loguru import logger
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
@@ -191,8 +192,66 @@ def require_role(*roles: str):
 require_admin = require_role(ROLE_ADMIN)
 
 
+# ── /uploads/* 预览审计中间件 ─────────────────────────────
+# 为什么要单独一个中间件：
+#   /uploads/* 由 Starlette StaticFiles 接管，不走 FastAPI 路由，
+#   无法像 /api/* 那样用 Depends(get_current_user) + audit.log() 记录读取。
+#   这里在 AuthTokenMiddleware 鉴权成功之后、StaticFiles 处理之前插一层，
+#   对 2xx 响应写 RECORD_PREVIEW 审计。
+#
+# 设计要点：
+#   · 只审计成功的 2xx 响应，404/403 不污染审计表（语义：已发生的访问）
+#   · 从 URL path 反推 patient_id（/uploads/<safe_patient_id>/photos/<file>）
+#     失败时 patient_id 留空，operator 仍然记录
+#   · 审计失败只 warning，不影响文件下载
+#   · 审计实例通过 get_audit_log() 惰性获取，避免 import 时序问题
+class ReadAuditMiddleware(BaseHTTPMiddleware):
+    """对 /uploads/* 的 GET 请求记 RECORD_PREVIEW 审计。"""
+
+    _PREFIX = "/uploads/"
+
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+
+        # 只审计：GET /uploads/* 且响应成功（2xx）
+        if (
+            request.method != "GET"
+            or not request.url.path.startswith(self._PREFIX)
+            or not (200 <= response.status_code < 300)
+        ):
+            return response
+
+        # 鉴权中间件保证 /uploads/* 必然有 request.state.user；防御性兜底
+        user = getattr(request.state, "user", None)
+        if not isinstance(user, User):
+            return response
+
+        # 解析 patient_id：/uploads/<safe_patient_id>/photos/<filename>
+        # safe_patient_id 是 _safe_filename() 的结果（可能与原始 patient_id 不完全一致），
+        # 但足以审计追溯；对不上的情况留空
+        path_tail = request.url.path[len(self._PREFIX):]
+        segments = path_tail.split("/", 1)
+        patient_id = segments[0] if segments and segments[0] else ""
+        filename = segments[1] if len(segments) > 1 else path_tail
+
+        try:
+            # 惰性导入 + 惰性获取 singleton，避免循环依赖 / 启动时序问题
+            from app.services.audit_log import get_audit_log
+            get_audit_log().log(
+                "RECORD_PREVIEW",
+                patient_id,
+                user.username,
+                detail=f"预览病历原件: {filename}",
+            )
+        except Exception as e:  # pragma: no cover - 审计失败绝不阻断下载
+            logger.warning(f"RECORD_PREVIEW 审计写入失败（不影响下载）: {e}")
+
+        return response
+
+
 __all__ = [
     "AuthTokenMiddleware",
+    "ReadAuditMiddleware",
     "get_current_user",
     "require_role",
     "require_admin",
