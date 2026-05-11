@@ -213,6 +213,10 @@ body{ display: flex; flex-direction: column; }
     <span class="sub">护工端</span>
   </a>
   <div class="nav-title" id="navTitle">请选择老人开始工作</div>
+  <div style="display:flex;align-items:center;gap:8px;">
+    <input id="tokenInput" class="field" style="font-size:11px;height:30px;width:160px;padding:0 8px;background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.15);color:#fff;border-radius:6px;" placeholder="粘贴 Token" oninput="setToken(this.value)">
+    <span id="authStatus" style="font-size:10px;color:rgba(226,232,240,0.6);white-space:nowrap;"></span>
+  </div>
   <a class="btn btn-primary btn-sm" href="/"><span class="icon-s" data-icon="settings"></span>管理端</a>
 </nav>
 
@@ -252,6 +256,23 @@ body{ display: flex; flex-direction: column; }
 </nav>
 
 <script>
+/* ═══════════ AUTH ═══════════ */
+const AUTH_KEY = 'zhyb_auth_token';
+function getToken(){ return localStorage.getItem(AUTH_KEY) || ''; }
+function setToken(t){ localStorage.setItem(AUTH_KEY, t); }
+function authHeaders(extra={}){ 
+  const h = {'Content-Type':'application/json', ...extra};
+  const t = getToken();
+  if(t) h['X-Auth-Token'] = t;
+  return h;
+}
+function authHeadersRaw(extra={}){
+  const h = {...extra};
+  const t = getToken();
+  if(t) h['X-Auth-Token'] = t;
+  return h;
+}
+
 /* ═══════════ STATE ═══════════ */
 let allPts = [];
 let curPt = null;
@@ -261,7 +282,7 @@ const toast = (m, t='info') => (window.ZhToast||{show:()=>{}}).show(m, t);
 /* ═══════════ 老人列表 ═══════════ */
 async function loadPts(){
   try{
-    const r = await fetch('/api/ehr/patients');
+    const r = await fetch('/api/ehr/patients', {headers: authHeadersRaw()});
     const raw = await r.json();
     allPts = Array.isArray(raw) ? raw : (raw.records || []);
     renderPtList(allPts);
@@ -407,7 +428,7 @@ async function initEvidencePanel(pid){
   evidencePanels[pid] = panel;
   panel.onOutcomeRecord(async (did, status, note)=>{
     const r = await fetch(`/api/nursing/decisions/${encodeURIComponent(did)}/outcome`, {
-      method:'PATCH', headers:{'Content-Type':'application/json'},
+      method:'PATCH', headers: authHeaders(),
       body: JSON.stringify({outcome_status: status, note, recorded_by:'护工端'})
     });
     if(!r.ok) throw new Error((await r.json()).detail || '回填失败');
@@ -419,7 +440,7 @@ async function refreshMemoryPanel(pid){
   const panel = evidencePanels[pid];
   if(!panel) return;
   try{
-    const r = await fetch(`/api/nursing/decisions?patient_id=${encodeURIComponent(pid)}&limit=5&days=30`);
+    const r = await fetch(`/api/nursing/decisions?patient_id=${encodeURIComponent(pid)}&limit=5&days=30`, {headers: authHeadersRaw()});
     if(!r.ok) return;
     const d = await r.json();
     panel.render(panel.evidence, d.decisions || []);
@@ -448,7 +469,7 @@ async function getAI(pid){
 }
 async function streamAI(pid, symptom){
   const res = await fetch('/api/nursing/decision/stream', {
-    method:'POST', headers:{'Content-Type':'application/json'},
+    method:'POST', headers: authHeaders(),
     body: JSON.stringify({patient_id:pid, symptom, n_results:5})
   });
   if(!res.ok) throw new Error('stream failed');
@@ -493,7 +514,7 @@ async function streamAI(pid, symptom){
   }
 }
 async function fallbackAI(pid, symptom){
-  const res = await fetch('/api/nursing/decision', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({patient_id:pid, symptom, n_results:5})});
+  const res = await fetch('/api/nursing/decision', {method:'POST', headers: authHeaders(), body: JSON.stringify({patient_id:pid, symptom, n_results:5})});
   if(!res.ok) throw new Error('请求失败');
   const d = await res.json();
   const card = document.getElementById('aiCard_'+pid);
@@ -516,7 +537,7 @@ async function getTaskCard(pid){
   btn.disabled = true; txt.innerHTML = '<span class="ring"></span> 正在生成任务卡…';
   try{
     const res = await fetch('/api/nursing/task-card', {
-      method:'POST', headers:{'Content-Type':'application/json'},
+      method:'POST', headers: authHeaders(),
       body: JSON.stringify({patient_id:pid, symptom, reporter:'护工端', location: curPt?.bed_number||'', n_results:3})
     });
     if(!res.ok) throw new Error(await res.text());
@@ -645,7 +666,7 @@ async function completeTask(pid, eventId, taskId, status, inputRequired, label, 
   if(inputRequired && status==='done' && !(v.val||'').trim()){ toast('请填写数值','warning'); return; }
   try{
     const res = await fetch(`/api/nursing/events/${encodeURIComponent(eventId)}/tasks/${encodeURIComponent(taskId)}/complete`, {
-      method:'PATCH', headers:{'Content-Type':'application/json'},
+      method:'PATCH', headers: authHeaders(),
       body: JSON.stringify({status, value: v.val||'', note: v.note||'', unit, completed_by:'护工端'})
     });
     if(!res.ok) throw new Error('更新失败');
@@ -684,14 +705,14 @@ async function addObservation(eventId, type){
   });
   if(!v || !v.val) return;
   const res = await fetch(`/api/nursing/events/${encodeURIComponent(eventId)}/observations`, {
-    method:'POST', headers:{'Content-Type':'application/json'},
+    method:'POST', headers: authHeaders(),
     body: JSON.stringify({vital_type: type, value: v.val, note: v.note, recorded_by:'护工端'})
   });
   toast(res.ok ? '记录已保存' : '保存失败', res.ok ? 'success' : 'error');
 }
 
 async function copySBAR(eventId){
-  const res = await fetch(`/api/nursing/events/${encodeURIComponent(eventId)}/sbar`);
+  const res = await fetch(`/api/nursing/events/${encodeURIComponent(eventId)}/sbar`, {headers: authHeadersRaw()});
   if(!res.ok){ toast('读取交接单失败','error'); return; }
   const d = await res.json();
   const s = d.handover_sbar || {};
@@ -703,7 +724,7 @@ async function copySBAR(eventId){
 async function archiveEvent(pid, eventId){
   const ok = await window.ZhDialog.confirm({ title:'归档这次护理？', text:'归档后仍可在记录中查看。', confirmText:'归档' });
   if(!ok) return;
-  const res = await fetch(`/api/nursing/events/${encodeURIComponent(eventId)}/archive`, {method:'POST'});
+  const res = await fetch(`/api/nursing/events/${encodeURIComponent(eventId)}/archive`, {method:'POST', headers: authHeadersRaw()});
   if(!res.ok){ toast('归档失败','error'); return; }
   const d = await res.json();
   renderTaskCard(pid, d.event);
@@ -734,8 +755,32 @@ function mobileTab(which){
   }
 }
 
+/* ═══════════ AUTH CHECK ═══════════ */
+async function checkAuth(){
+  const st = document.getElementById('authStatus');
+  const t = getToken();
+  if(!t){ if(st) st.textContent = '未登录'; return; }
+  try{
+    const r = await fetch('/api/auth/me', {headers: authHeadersRaw()});
+    if(r.ok){
+      const d = await r.json();
+      if(st) st.innerHTML = `<span style="color:#5eead4">●</span> ${d.username}`;
+    } else {
+      if(st) st.textContent = 'Token 无效';
+    }
+  }catch(e){ if(st) st.textContent = '离线'; }
+}
+
 /* ═══════════ PWA ═══════════ */
 if('serviceWorker' in navigator) navigator.serviceWorker.register('/static/sw.js').catch(()=>{});
+
+// Restore token
+(function(){
+  const savedToken = getToken();
+  const tokenInput = document.getElementById('tokenInput');
+  if(tokenInput && savedToken) tokenInput.value = savedToken;
+  checkAuth();
+})();
 
 loadPts();
 
