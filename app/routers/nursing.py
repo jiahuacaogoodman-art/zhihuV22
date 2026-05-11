@@ -17,6 +17,7 @@ from app.models.schemas import (
 from app.middleware.auth import get_current_user
 from app.services.audit_log import get_audit_log
 from app.services.llm_service import OllamaLLMService
+from app.services.pii_crypto import decrypt_pii_fields
 from app.services.retrieval import HybridRetriever, format_evidence_block, legacy_context_string
 from app.services.decision_memory import DecisionMemory, format_memory_block
 from app.services.user_store import User
@@ -180,7 +181,12 @@ CITATION_RAG_PROMPT = """你是经验丰富的养老护理辅助 AI。请严格�
     summary="查询患者档案摘要（护工端使用）"
 )
 async def get_patient_info(patient_id: str, user: User = Depends(get_current_user)):
-    """根据 patient_id 返回患者的完整档案信息，供护工端预览"""
+    """根据 patient_id 返回患者的完整档案信息，供护工端预览。
+
+    注意：ChromaDB metadata 里的 PII 字段（name / bed_number / allergy /
+    emergency_* / notes 等）在写入时被 Fernet 加密（enc: 前缀），这里必须
+    先调 decrypt_pii_fields，否则护工端页面会看到一串密文乱码。
+    """
     collection, _ = _get_state()
     try:
         result = collection.get(
@@ -195,7 +201,8 @@ async def get_patient_info(patient_id: str, user: User = Depends(get_current_use
             if m.get("doc_type") in (None, "", "patient_profile"):
                 profile_idx = i
                 break
-        meta = result["metadatas"][profile_idx]
+        # 透明解密 PII 字段；未加密部署下为 no-op
+        meta = decrypt_pii_fields(result["metadatas"][profile_idx])
         doc = result["documents"][profile_idx]
         response_body = {
             "code": 200,
