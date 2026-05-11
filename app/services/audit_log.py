@@ -17,11 +17,23 @@
   query(patient_id=None, action=None, operator=None, limit=100) -> list[dict]
 
 操作类型（action 枚举字符串）
-  PATIENT_CREATE  新建患者基本档案
-  PATIENT_UPDATE  修改患者基本档案
-  PATIENT_DELETE  删除患者全部档案
-  RECORD_UPLOAD   上传病历照片
-  RECORD_DELETE   删除病历照片档案
+  写操作
+    PATIENT_CREATE   新建患者基本档案
+    PATIENT_UPDATE   修改患者基本档案
+    PATIENT_DELETE   删除患者全部档案
+    RECORD_UPLOAD    上传病历照片
+    RECORD_DELETE    删除病历照片档案
+  读操作（Phase 1C 起新增，合规"查阅记录"必留痕）
+    PATIENT_READ     查看某患者完整档案（nursing/ehr 两条入口都记这个）
+    PATIENT_LIST     查询患者列表（detail 里记返回条数，patient_id 留空）
+    RECORD_READ      查询某患者的病历照片/OCR 列表
+    RECORD_PREVIEW   /uploads/* 预览病历原件（StaticFiles，由 ReadAuditMiddleware 统一记）
+    DECISION_READ    查询 AI 决策记忆（列表或单条，detail 里区分）
+
+约定
+  · GET /api/ehr/audit 本身不审计，避免递归；该接口也仅 admin 可用。
+  · 失败的请求（4xx/5xx）不进审计表，保持表语义为"已成功发生的访问"。
+  · 审计写入失败仅 warning 不阻断业务（见 AuditLog.log 实现）。
 """
 
 from __future__ import annotations
@@ -184,3 +196,47 @@ def _diff_meta(before: dict, after: dict, fields: list[str]) -> dict:
             b[f] = bv
             a[f] = av
     return {"before": b, "after": a} if b or a else {}
+
+
+# ── 全局 singleton 工厂 ───────────────────────────────────
+# 为什么要 singleton：
+#   · ehr 和 nursing 两个路由模块都要写审计。如果各自 new AuditLog()，
+#     两个 sqlite3 连接池会争用同一个 WAL 文件，虽然 SQLite 自己能处理，
+#     但每次 log 都建立新连接还是浪费。
+#   · ReadAuditMiddleware 也要用同一个实例记 /uploads/* 预览。
+#
+# 调用方应通过 get_audit_log() 获取实例，不要直接 AuditLog()。
+# 首次调用时按 BASE_DIR/local_audit_log/audit.db 初始化。
+_audit_singleton: "AuditLog | None" = None
+_audit_lock = threading.Lock()
+
+
+def get_audit_log(db_path: str | Path | None = None) -> AuditLog:
+    """
+    获取全局审计日志实例（线程安全的惰性单例）。
+
+    首次调用：按 db_path（或 BASE_DIR/local_audit_log/audit.db）初始化。
+    后续调用：返回同一个实例，忽略 db_path 参数。
+
+    测试里可以通过 reset_audit_log() 重置，然后用自定义 tmp 路径初始化。
+    """
+    global _audit_singleton
+    if _audit_singleton is not None:
+        return _audit_singleton
+    with _audit_lock:
+        if _audit_singleton is not None:
+            return _audit_singleton
+        if db_path is None:
+            from app.core.config import BASE_DIR
+            audit_dir = Path(BASE_DIR) / "local_audit_log"
+            audit_dir.mkdir(parents=True, exist_ok=True)
+            db_path = audit_dir / "audit.db"
+        _audit_singleton = AuditLog(db_path)
+    return _audit_singleton
+
+
+def reset_audit_log() -> None:
+    """仅测试用：清空单例引用，让下次 get_audit_log() 用新路径重新建。"""
+    global _audit_singleton
+    with _audit_lock:
+        _audit_singleton = None
