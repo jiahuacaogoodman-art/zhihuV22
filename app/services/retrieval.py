@@ -161,6 +161,47 @@ def _best_snippet(doc: str, query: str, max_len: int = 220) -> str:
 
 
 # ── 主入口 ────────────────────────────────────────────────────
+
+# 进程级 BM25 索引缓存。
+# Key:   (patient_id, frozenset(doc_ids))   ← doc_ids 变化时自动失效
+# Value: (BM25 instance, sub_ids, sub_docs, sub_metas)
+#
+# 设计考量：
+#   - 养老院场景下单个患者的档案量通常 < 200 条，BM25 对象仅几 KB
+#   - 读档案时 Chroma.get() 已经是主要延迟来源；命中缓存后 BM25 步骤
+#     从 O(N·|tokens|) 降到 O(1)
+#   - 缓存失效条件：frozenset(doc_ids) 变化（增删档案/病历）
+#   - 最大缓存条目数：MAX_BM25_ENTRIES（默认 128 患者），超出时删最旧
+import threading as _threading
+
+MAX_BM25_ENTRIES = 128
+
+_bm25_cache: dict = {}         # key → (BM25, sub_ids, sub_docs, sub_metas, frozenset)
+_bm25_order: list = []         # 保持插入顺序，用于 LRU 淘汰
+_bm25_lock = _threading.Lock()
+
+
+def _bm25_put(cache_key: tuple, bm25_obj: "BM25", sub_ids, sub_docs, sub_metas) -> None:
+    with _bm25_lock:
+        if cache_key in _bm25_cache:
+            _bm25_order.remove(cache_key)
+        elif len(_bm25_order) >= MAX_BM25_ENTRIES:
+            oldest = _bm25_order.pop(0)
+            _bm25_cache.pop(oldest, None)
+        _bm25_cache[cache_key] = (bm25_obj, sub_ids, sub_docs, sub_metas)
+        _bm25_order.append(cache_key)
+
+
+def _bm25_get(cache_key: tuple):
+    with _bm25_lock:
+        entry = _bm25_cache.get(cache_key)
+        if entry:
+            # 命中 → 移到末尾（LRU）
+            _bm25_order.remove(cache_key)
+            _bm25_order.append(cache_key)
+        return entry
+
+
 class HybridRetriever:
     def __init__(self, collection, embedding_function):
         self.collection = collection
@@ -208,9 +249,15 @@ class HybridRetriever:
         sub_docs = [docs[i] or "" for i in keep_idx]
         sub_metas = [metas[i] or {} for i in keep_idx]
 
-        # 3. BM25 打分（稀疏）
-        corpus_tokens = [tokenize(d) for d in sub_docs]
-        bm25 = BM25(corpus_tokens)
+        # 3. BM25 打分（稀疏）— 命中缓存时跳过 tokenize + BM25.__init__
+        cache_key = (patient_id, frozenset(sub_ids))
+        cached = _bm25_get(cache_key)
+        if cached is not None:
+            bm25, sub_ids, sub_docs, sub_metas = cached
+        else:
+            corpus_tokens = [tokenize(d) for d in sub_docs]
+            bm25 = BM25(corpus_tokens)
+            _bm25_put(cache_key, bm25, sub_ids, sub_docs, sub_metas)
         bm25_scores = bm25.score(tokenize(query))
         bm25_rank = sorted(range(len(sub_ids)), key=lambda i: bm25_scores[i], reverse=True)
         bm25_top = bm25_rank[:bm25_k]
