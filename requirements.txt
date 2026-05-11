@@ -26,6 +26,7 @@ pydantic==2.10.3
 python-multipart==0.0.20   # 支持 multipart/form-data
 python-dotenv==1.0.1       # 环境变量管理
 loguru==0.7.3              # 结构化日志
+pyyaml==6.0.2              # 护理协议模板 YAML 热加载（data/protocols.yaml）
 
 # --- 开发 / 测试（可选）---
 httpx==0.28.1              # 异步测试客户端
