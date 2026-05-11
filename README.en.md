@@ -16,7 +16,7 @@
   <img alt="chroma"  src="https://img.shields.io/badge/ChromaDB-0.5-3C1F85">
   <img alt="ollama"  src="https://img.shields.io/badge/Ollama-huatuo__o1__7b-000000?logo=ollama&logoColor=white">
   <img alt="offline" src="https://img.shields.io/badge/Runtime-100%25%20Offline-10B981">
-  <img alt="license" src="https://img.shields.io/badge/License-MIT-green">
+  <img alt="license" src="https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-blue">
 </p>
 
 <p align="center">
@@ -293,7 +293,13 @@ In emergencies, call a doctor or start your facility's emergency protocol.
 
 ## 📜 License
 
-MIT © [jiahuaCao](https://github.com/jiahuacaogoodman-art)
+This project is licensed under the **[PolyForm Noncommercial License 1.0.0](./LICENSE)** — **noncommercial use only**.
+
+- ✅ Allowed: personal study / research, teaching, public-interest use, internal use inside nonprofit hospitals and elderly-care homes, and modification / redistribution for any noncommercial purpose (this license must be preserved).
+- ❌ Not allowed: any commercial use of the project or its derivatives — including selling it as a product or SaaS, offering paid deployment / hosting, or bundling it into commercial software.
+- 📮 For a **commercial license**, please reach out separately: [@jiahuacaogoodman-art](https://github.com/jiahuacaogoodman-art)
+
+Copyright © 2026 [jiahuaCao](https://github.com/jiahuacaogoodman-art)
 
 ---
 

@@ -17,6 +17,7 @@ from loguru import logger
 
 from app.core.config import EHR_UPLOAD_DIR, MAX_UPLOAD_SIZE_MB, ALLOWED_UPLOAD_EXTENSIONS, BASE_DIR
 from app.services.audit_log import AuditLog, _diff_meta
+from app.services.pii_crypto import encrypt_pii_fields, decrypt_pii_fields
 from app.models.schemas import (
     EHRAddRequest, EHRAddResponse,
     EHRUpdateRequest, EHRUpdateResponse,
@@ -83,13 +84,16 @@ def _patient_upload_dir(patient_id: str) -> Path:
 
 
 def _build_metadata(payload_dict: dict) -> dict:
-    """从请求字典中提取非空字段，构建 ChromaDB metadata（只允许基础类型）"""
+    """从请求字典中提取非空字段，构建 ChromaDB metadata（只允许基础类型）。
+    高敏感 PII 字段（身份证、紧急联系人电话等）在写入前透明加密。
+    """
     meta = {}
     for field in META_FIELDS:
         val = payload_dict.get(field)
         if val is not None:
             meta[field] = val if isinstance(val, (str, int, float, bool)) else str(val)
-    return meta
+    # PII 加密：加密后的密文仍是字符串，对 ChromaDB metadata 类型无影响
+    return encrypt_pii_fields(meta)
 
 
 def _build_document(payload_dict: dict) -> str:
@@ -157,7 +161,8 @@ def _build_upload_document(meta: dict, ocr_text: str, manual_text: Optional[str]
 
 
 def _meta_to_record(doc_id: str, document: str, meta: dict) -> EHRRecord:
-    """将 ChromaDB metadata 还原为 EHRRecord 对象"""
+    """将 ChromaDB metadata 还原为 EHRRecord 对象（PII 字段透明解密）"""
+    meta = decrypt_pii_fields(meta)
     return EHRRecord(
         doc_id=doc_id,
         patient_id=meta.get("patient_id", ""),

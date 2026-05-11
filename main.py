@@ -6,10 +6,13 @@
 @Desc    : "智护银伴" 后端应用主入口
 """
 
+import os
 import uvicorn
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from contextlib import asynccontextmanager
 import chromadb
 from sentence_transformers import SentenceTransformer
@@ -21,8 +24,10 @@ from app.core.config import (
     CHROMA_COLLECTION_NAME,
     EMBEDDING_MODEL_NAME,
     EMBEDDING_DEVICE,
-    EHR_UPLOAD_DIR
+    EHR_UPLOAD_DIR,
+    AUTH_TOKEN,
 )
+from app.middleware.auth import AuthTokenMiddleware
 from app.routers import ehr, nursing
 
 # ----------------------------------------------------------------
@@ -103,6 +108,16 @@ app.include_router(ehr.router, prefix="/api", tags=["EHR Management"])
 app.include_router(nursing.router, prefix="/api", tags=["Nursing Decision Support"])
 
 # ----------------------------------------------------------------
+# 鉴权中间件：保护 /api/* 和 /uploads/*
+# AUTH_TOKEN 留空则关闭（开发模式）；生产部署必须通过环境变量设置。
+# ----------------------------------------------------------------
+app.add_middleware(AuthTokenMiddleware, token=AUTH_TOKEN)
+if AUTH_TOKEN:
+    logger.info("鉴权已启用：/api/* 和 /uploads/* 需要 X-Auth-Token 请求头")
+else:
+    logger.warning("AUTH_TOKEN 未配置，鉴权已关闭（仅限开发环境，生产请设置环境变量 AUTH_TOKEN）")
+
+# ----------------------------------------------------------------
 # 关键修复：使用绝对路径挂载静态文件目录
 # 确保 Windows 和 Linux 下均能正确找到 static/ 文件夹
 # ----------------------------------------------------------------
@@ -117,13 +132,47 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 logger.info(f"病历照片上传目录已挂载: {UPLOAD_DIR}")
 
-# 全局异常处理器
+# ----------------------------------------------------------------
+# 全局异常处理：按异常类型分层处理
+# ----------------------------------------------------------------
+# 设计要点：
+# 1. HTTPException / StarletteHTTPException（404、400、413、503 等）走 FastAPI
+#    的默认逻辑，保留业务路由里手写的 status_code 和 detail，不能被兜底成 500。
+# 2. RequestValidationError（422）保留 Pydantic 的字段级错误信息，便于前端排错。
+# 3. 只有真正未处理的 Exception 才落进 500 通道；500 响应体里**不能**回写
+#    原始 exception 字符串，避免泄露内部路径 / SQL / 堆栈。完整信息只进日志。
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    detail = exc.detail if exc.detail is not None else ""
+    if request.url.path.startswith("/api") or exc.status_code >= 500:
+        logger.warning(f"HTTPException {exc.status_code} at {request.url}: {detail}")
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"code": exc.status_code, "message": str(detail) or "request failed"},
+        headers=getattr(exc, "headers", None) or None,
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    logger.info(f"请求校验失败 at {request.url}: {exc.errors()}")
+    return JSONResponse(
+        status_code=422,
+        content={
+            "code": 422,
+            "message": "请求参数校验失败",
+            "errors": exc.errors(),
+        },
+    )
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    logger.error(f"未处理的异常: {exc} at {request.url}")
+    # 用 logger.exception 保留完整堆栈到服务端日志；响应体里不回写 exc。
+    logger.exception(f"未处理的服务端异常 at {request.url}")
     return JSONResponse(
         status_code=500,
-        content={"code": 500, "message": f"服务器内部错误: {exc}"},
+        content={"code": 500, "message": "服务器内部错误，请稍后重试或联系管理员"},
     )
 
 # ----------------------------------------------------------------
@@ -165,4 +214,10 @@ async def health_check():
 
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    # 开发模式热重载：仅在显式设置 RELOAD=1 时开启。
+    # 生产环境（systemd / docker / uvicorn --workers N）不应启用 reload——
+    # 它会和多 worker 冲突，并且每次 .py 变更都会重新加载 embedding 模型。
+    reload_enabled = os.getenv("RELOAD", "0").lower() in {"1", "true", "yes"}
+    host = os.getenv("HOST", "0.0.0.0")
+    port = int(os.getenv("PORT", "8000"))
+    uvicorn.run("main:app", host=host, port=port, reload=reload_enabled)

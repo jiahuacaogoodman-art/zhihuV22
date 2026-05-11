@@ -38,6 +38,18 @@ OLLAMA_API_URL = "http://localhost:11434/api/generate"
 # 本地运行的模型名称
 OLLAMA_MODEL_NAME = "huatuo_o1_7b"
 
+# --- 鉴权配置 ---
+# AUTH_TOKEN：所有 /api/* 和 /uploads/* 请求必须携带请求头 X-Auth-Token: <token>。
+# 生产部署时务必通过环境变量设置一个长随机字符串（推荐 32+ 字符）。
+# 留空 / 不设置 → 鉴权关闭（仅供开发环境，生产环境禁止留空）。
+AUTH_TOKEN: str = os.getenv("AUTH_TOKEN", "")
+
+# --- PII 字段加密 ---
+# 高敏感字段（id_card / emergency_phone 等）写入 ChromaDB 前 Fernet 对称加密。
+# 留空 → 加密关闭（仅限开发/测试环境，生产必须设置）。
+# 生成密钥：python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+PII_ENCRYPTION_KEY: str = os.getenv("PII_ENCRYPTION_KEY", "")
+
 # --- RAG Prompt 模板 ---
 # 设计一个结构化的 Prompt，清晰地分离背景信息和当前问题，引导模型进行有效思考
 RAG_PROMPT_TEMPLATE = (
