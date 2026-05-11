@@ -188,6 +188,38 @@ ollama run huatuo_o1_7b "高血压老人头晕该怎么处理？"
 | 首次推理特别慢（10 秒+） | 冷启动加载权重 | 正常现象；想预热跑 `ollama run huatuo_o1_7b ""` |
 | OOM 内存炸 | 16 GB 机器跑 7B 偏紧 | 走上面"硬件带不动 7B"的小模型方案 |
 
+### 权重文件到底存在哪？
+
+**不需要本项目指定**，Ollama 自己管，默认路径：
+
+| 系统 | 路径 |
+|---|---|
+| Linux / macOS | `~/.ollama/models/` |
+| Windows | `C:\Users\<你>\.ollama\models\` |
+
+目录里 `blobs/` 存真正的权重二进制（8 GB），`manifests/` 存"目录表"（几 KB）。
+
+**`ollama cp huatuo_o1_7b` 不占双份空间** —— Ollama 按内容 hash 存 blob，
+`ollama list` 会显示 `cliu/HuatuoGPT-o1-7B` 和 `huatuo_o1_7b` 两条，但两条
+指向同一堆字节，磁盘上**只占 8 GB 一份**。
+
+**想挪到别的盘**（比如 `/home` 小、想放到 SSD）：
+
+```bash
+# 在启动 Ollama 之前设置环境变量
+export OLLAMA_MODELS=/data/ollama-models
+ollama serve
+```
+
+systemd 方式编辑 `/etc/systemd/system/ollama.service.d/override.conf`：
+
+```ini
+[Service]
+Environment="OLLAMA_MODELS=/data/ollama-models"
+```
+
+然后 `sudo systemctl daemon-reload && sudo systemctl restart ollama` 生效。
+
 <details>
 <summary><b>高级：断网部署 / 自建量化版本（从 GGUF 导入）</b></summary>
 

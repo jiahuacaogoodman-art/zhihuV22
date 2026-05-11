@@ -216,6 +216,39 @@ ollama run huatuo_o1_7b "What should a caregiver do for elderly dizziness?"
 | First inference takes 10 s+ | Cold start loading weights | Expected; pre-warm with `ollama run huatuo_o1_7b ""` |
 | OOM on 16 GB | 7B is tight at 16 GB | Use the smaller-model fallback above |
 
+### Where are the weights stored?
+
+**Not specified by this project** — Ollama manages it. Default location:
+
+| OS | Path |
+|---|---|
+| Linux / macOS | `~/.ollama/models/` |
+| Windows | `C:\Users\<you>\.ollama\models\` |
+
+Inside: `blobs/` has the actual weight binaries (~8 GB), `manifests/` has the lookup metadata (a few KB).
+
+**`ollama cp huatuo_o1_7b` does NOT double disk usage** — Ollama stores blobs
+by content hash. `ollama list` will show both `cliu/HuatuoGPT-o1-7B` and
+`huatuo_o1_7b`, but they point to the same bytes. Disk usage is **8 GB total,
+not 16 GB**.
+
+**Want to move it elsewhere** (e.g. `/home` is small, want it on an SSD):
+
+```bash
+# Set env var BEFORE starting Ollama
+export OLLAMA_MODELS=/data/ollama-models
+ollama serve
+```
+
+For systemd installs, edit `/etc/systemd/system/ollama.service.d/override.conf`:
+
+```ini
+[Service]
+Environment="OLLAMA_MODELS=/data/ollama-models"
+```
+
+Then `sudo systemctl daemon-reload && sudo systemctl restart ollama`.
+
 <details>
 <summary><b>Advanced: air-gapped install / custom quantization (import from GGUF)</b></summary>
 

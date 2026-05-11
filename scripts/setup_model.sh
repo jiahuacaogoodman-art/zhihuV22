@@ -111,6 +111,14 @@ else
     ok "模型回话：${REPLY}..."
 fi
 
+# ---- 6. 告诉用户权重存在哪 ----
+MODELS_DIR="${OLLAMA_MODELS:-$HOME/.ollama/models}"
+say "权重文件存储位置：$MODELS_DIR"
+if [ -d "$MODELS_DIR" ]; then
+    SIZE=$(du -sh "$MODELS_DIR" 2>/dev/null | cut -f1 || echo "?")
+    echo "       当前大小：$SIZE（注：ollama cp 的别名共用 blob，不占双份）"
+fi
+
 cat <<EOF
 
 ${G}=== 全部搞定 ===${N}
@@ -121,5 +129,8 @@ ${G}=== 全部搞定 ===${N}
     uvicorn main:app --host 0.0.0.0 --port 8000
 
 服务起来后访问 http://localhost:8000/
+
+想把权重挪到别的盘？在启动 ollama 之前设置环境变量：
+    export OLLAMA_MODELS=/your/path    # 然后重启 ollama 服务
 
 EOF
