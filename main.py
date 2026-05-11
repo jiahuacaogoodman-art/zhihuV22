@@ -28,7 +28,9 @@ from app.core.config import (
     AUTH_TOKEN,
 )
 from app.middleware.auth import AuthTokenMiddleware
+from app.routers import auth as auth_router
 from app.routers import ehr, nursing
+from app.services.user_store import UserStore
 
 # ----------------------------------------------------------------
 # 关键修复：使用 Path(__file__).resolve() 获取绝对路径
@@ -41,6 +43,21 @@ UPLOAD_DIR = Path(EHR_UPLOAD_DIR)
 
 # 全局应用状态字典，存储 ChromaDB 连接和 Embedding 模型实例
 app_state = {}
+
+# ----------------------------------------------------------------
+# UserStore 初始化（模块级）
+# 为什么在 lifespan 之外做：AuthTokenMiddleware 在 app.add_middleware() 时
+# 构造，那时 lifespan 还没跑。把 UserStore 提前到模块级初始化，让中间件
+# 能拿到实例引用；同时对测试也更友好（不依赖 TestClient 触发 lifespan）。
+#
+# UserStore 只操作一个独立 SQLite 文件，无外部依赖，模块级初始化安全。
+# ----------------------------------------------------------------
+_USER_STORE_DIR = BASE_DIR / "local_auth"
+_USER_STORE_DIR.mkdir(parents=True, exist_ok=True)
+user_store = UserStore(_USER_STORE_DIR / "users.db")
+# 旧部署只配了 AUTH_TOKEN 环境变量 → 自动把它注入为 admin 的 API Key
+# （UserStore 为空时才会执行；否则忽略，避免每次启动重复创建）
+user_store.bootstrap_legacy_admin(AUTH_TOKEN)
 
 
 @asynccontextmanager
@@ -104,18 +121,34 @@ app = FastAPI(
 )
 
 # 挂载 API 路由
+app.include_router(auth_router.router, prefix="/api", tags=["Auth / Users"])
 app.include_router(ehr.router, prefix="/api", tags=["EHR Management"])
 app.include_router(nursing.router, prefix="/api", tags=["Nursing Decision Support"])
 
 # ----------------------------------------------------------------
 # 鉴权中间件：保护 /api/* 和 /uploads/*
-# AUTH_TOKEN 留空则关闭（开发模式）；生产部署必须通过环境变量设置。
+# 三种模式（见 app/middleware/auth.py 顶部注释）：
+#   - user_store：UserStore 已有用户（常态，bootstrap_legacy_admin 之后也是此模式）
+#   - legacy_token：UserStore 为空但 AUTH_TOKEN 非空（极少出现，bootstrap 成功后即脱离）
+#   - disabled：两者都空（仅限开发/测试）
 # ----------------------------------------------------------------
-app.add_middleware(AuthTokenMiddleware, token=AUTH_TOKEN)
-if AUTH_TOKEN:
-    logger.info("鉴权已启用：/api/* 和 /uploads/* 需要 X-Auth-Token 请求头")
+app.add_middleware(AuthTokenMiddleware, legacy_token=AUTH_TOKEN, user_store=user_store)
+
+# 把 UserStore 和 auth_mode 挂到 app.state，供路由通过 request.app.state 读取，
+# 避免 routers/auth.py 反向 import main 模块（破坏层次）。
+app.state.user_store = user_store
+if user_store.has_users():
+    app.state.auth_mode = "user_store"
+    logger.info(f"鉴权已启用（user_store 模式）：/api/* 和 /uploads/* 需要 X-Auth-Token")
+elif AUTH_TOKEN:
+    app.state.auth_mode = "legacy_token"
+    logger.info("鉴权已启用（legacy_token 模式）：/api/* 和 /uploads/* 需要 X-Auth-Token")
 else:
-    logger.warning("AUTH_TOKEN 未配置，鉴权已关闭（仅限开发环境，生产请设置环境变量 AUTH_TOKEN）")
+    app.state.auth_mode = "disabled"
+    logger.warning(
+        "AUTH_TOKEN 未配置且 UserStore 为空，鉴权已关闭"
+        "（仅限开发/测试；生产请设置 AUTH_TOKEN 或通过 /api/auth/users 建号）"
+    )
 
 # ----------------------------------------------------------------
 # 关键修复：使用绝对路径挂载静态文件目录

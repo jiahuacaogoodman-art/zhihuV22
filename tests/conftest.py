@@ -77,6 +77,34 @@ sys.modules.setdefault("pytesseract", _stub_pytesseract())
 sys.modules.setdefault("PIL", _stub_PIL())
 
 
+# ── UserStore fixtures（Phase 1 起可用）──────────────────────
+@pytest.fixture
+def fresh_user_store(tmp_path):
+    """
+    每次用例独立的空 UserStore（tmp SQLite）。
+
+    注意：这不是 main 模块级那个全局 user_store；业务路由里的 Depends 仍然
+    走 request.app.state.user_store，测试里如果要影响业务路由行为，需要
+    用 _build_test_app(fresh_user_store, ...) 组 mini app。
+    """
+    from app.services.user_store import UserStore
+    return UserStore(tmp_path / "users.db")
+
+
+@pytest.fixture
+def admin_store_and_token(fresh_user_store):
+    """
+    返回 (UserStore, admin_token)：
+      - UserStore 预置 username=admin, role=admin
+      - admin_token 是明文 API Key（仅测试内使用）
+    """
+    admin = fresh_user_store.create_user(
+        username="admin", display_name="Test Admin", role="admin"
+    )
+    token, _ = fresh_user_store.create_token(admin.user_id, label="test-admin-key")
+    return fresh_user_store, token
+
+
 @pytest.fixture(scope="session")
 def client():
     """
