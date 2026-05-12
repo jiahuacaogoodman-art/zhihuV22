@@ -47,6 +47,10 @@ PERM_EHR_AUDIT_READ = "ehr.audit_read"      # 查看操作审计日志
 PERM_NURSING_DECISION = "nursing.decision"  # 调用 AI 决策 / 提示词优化
 PERM_NURSING_TASKCARD = "nursing.taskcard"  # 生成 / 更新任务卡 / 事件闭环
 
+# 账务（入住 / 账单 / 收款）
+PERM_BILLING_READ = "billing.read"          # 查看入住、账单、收款流水
+PERM_BILLING_WRITE = "billing.write"        # 新建入住、出具账单、登记收款
+
 
 # ── 权限点元数据 ─────────────────────────────────────────
 @dataclass(frozen=True)
@@ -120,6 +124,19 @@ ALL_PERMISSIONS: tuple[PermissionSpec, ...] = (
         display_name="护理任务卡",
         description="生成任务卡、打卡、记录观察、归档事件",
     ),
+    # 账务
+    PermissionSpec(
+        perm_key=PERM_BILLING_READ,
+        category="billing",
+        display_name="查看账单收款",
+        description="查看老人入住、月度账单与收款流水",
+    ),
+    PermissionSpec(
+        perm_key=PERM_BILLING_WRITE,
+        category="billing",
+        display_name="管理账单收款",
+        description="登记入住出住、出具月度账单、记录/作废收款",
+    ),
 )
 
 # 快查索引：perm_key → PermissionSpec
@@ -142,12 +159,14 @@ ALL_PERM_KEYS: frozenset[str] = frozenset(p.perm_key for p in ALL_PERMISSIONS)
 BUILTIN_ROLE_ADMIN = "admin"
 BUILTIN_ROLE_NURSE = "nurse"
 BUILTIN_ROLE_CAREGIVER = "caregiver"
+BUILTIN_ROLE_FINANCE = "finance"
 
 # role_key -> display_name
 BUILTIN_ROLES: dict[str, str] = {
     BUILTIN_ROLE_ADMIN: "系统管理员",
     BUILTIN_ROLE_NURSE: "护士",
     BUILTIN_ROLE_CAREGIVER: "护工",
+    BUILTIN_ROLE_FINANCE: "财务",
 }
 
 # role_key -> default permission set
@@ -166,6 +185,13 @@ BUILTIN_ROLE_PERMISSIONS: dict[str, Sequence[str]] = {
         PERM_EHR_WRITE,
         PERM_NURSING_DECISION,
         PERM_NURSING_TASKCARD,
+    ),
+    # 财务：看档案（要知道账是谁的）+ 账务读写。
+    # 不给 ehr.write / nursing.*，财务视角只关心钱。
+    BUILTIN_ROLE_FINANCE: (
+        PERM_EHR_READ,
+        PERM_BILLING_READ,
+        PERM_BILLING_WRITE,
     ),
 }
 
@@ -209,8 +235,12 @@ __all__ = [
     "BUILTIN_ROLE_ADMIN",
     "BUILTIN_ROLE_NURSE",
     "BUILTIN_ROLE_CAREGIVER",
+    "BUILTIN_ROLE_FINANCE",
     "BUILTIN_ROLES",
     "BUILTIN_ROLE_PERMISSIONS",
+    # billing perms
+    "PERM_BILLING_READ",
+    "PERM_BILLING_WRITE",
     # helpers
     "expand_builtin_perms",
     "is_valid_perm_key",

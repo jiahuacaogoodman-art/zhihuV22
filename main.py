@@ -29,9 +29,11 @@ from app.core.config import (
 )
 from app.middleware.auth import AuthTokenMiddleware, ReadAuditMiddleware
 from app.routers import auth as auth_router
+from app.routers import billing as billing_router
 from app.routers import ehr, nursing
 from app.services.pii_crypto import is_encryption_enabled
 from app.services.user_store import UserStore
+from app.services.billing_store import BillingStore
 
 # ----------------------------------------------------------------
 # 关键修复：使用 Path(__file__).resolve() 获取绝对路径
@@ -59,6 +61,11 @@ user_store = UserStore(_USER_STORE_DIR / "users.db")
 # 旧部署只配了 AUTH_TOKEN 环境变量 → 自动把它注入为 admin 的 API Key
 # （UserStore 为空时才会执行；否则忽略，避免每次启动重复创建）
 user_store.bootstrap_legacy_admin(AUTH_TOKEN)
+
+# ── BillingStore 初始化（模块级，同 UserStore 策略）──────────
+_BILLING_STORE_DIR = BASE_DIR / "local_billing"
+_BILLING_STORE_DIR.mkdir(parents=True, exist_ok=True)
+billing_store = BillingStore(_BILLING_STORE_DIR / "billing.db")
 
 # ----------------------------------------------------------------
 # PII 加密启动检查
@@ -140,6 +147,7 @@ app = FastAPI(
 app.include_router(auth_router.router, prefix="/api", tags=["Auth / Users"])
 app.include_router(ehr.router, prefix="/api", tags=["EHR Management"])
 app.include_router(nursing.router, prefix="/api", tags=["Nursing Decision Support"])
+app.include_router(billing_router.router, prefix="/api", tags=["Billing"])
 
 # ----------------------------------------------------------------
 # 鉴权中间件：保护 /api/* 和 /uploads/*
@@ -159,6 +167,7 @@ app.add_middleware(AuthTokenMiddleware, legacy_token=AUTH_TOKEN, user_store=user
 # 把 UserStore 和 auth_mode 挂到 app.state，供路由通过 request.app.state 读取，
 # 避免 routers/auth.py 反向 import main 模块（破坏层次）。
 app.state.user_store = user_store
+app.state.billing_store = billing_store
 if user_store.has_users():
     app.state.auth_mode = "user_store"
     logger.info(f"鉴权已启用（user_store 模式）：/api/* 和 /uploads/* 需要 X-Auth-Token")

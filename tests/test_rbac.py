@@ -66,7 +66,7 @@ class TestRbacSeedAndSync:
         store = UserStore(tmp_path / "users.db")
         roles = store.list_roles()
         role_keys = {r.role_key for r, _ in roles}
-        assert role_keys == {BUILTIN_ROLE_ADMIN, BUILTIN_ROLE_NURSE, BUILTIN_ROLE_CAREGIVER}
+        assert role_keys == {BUILTIN_ROLE_ADMIN, BUILTIN_ROLE_NURSE, BUILTIN_ROLE_CAREGIVER, "finance"}
         for role, perms in roles:
             assert role.system is True
             assert len(perms) > 0
@@ -153,12 +153,12 @@ class TestRbacRoleCrud:
 
     def test_update_role_permissions(self, tmp_path):
         store = UserStore(tmp_path / "users.db")
-        store.create_role("finance", "财务", permissions=[PERM_EHR_READ])
+        store.create_role("billing_clerk", "财务文员", permissions=[PERM_EHR_READ])
         store.update_role(
-            "finance",
+            "billing_clerk",
             permissions=[PERM_EHR_READ, PERM_EHR_AUDIT_READ],
         )
-        _, perms = store.get_role_by_key("finance")
+        _, perms = store.get_role_by_key("billing_clerk")
         assert set(perms) == {PERM_EHR_READ, PERM_EHR_AUDIT_READ}
 
     def test_admin_permissions_protected(self, tmp_path):
@@ -360,18 +360,18 @@ class TestRolesEndpoints:
                 "/api/auth/roles",
                 headers=h,
                 json={
-                    "role_key": "finance",
-                    "display_name": "财务",
+                    "role_key": "accountant",
+                    "display_name": "会计",
                     "description": "日常收费",
                     "permissions": [PERM_EHR_READ, PERM_EHR_AUDIT_READ],
                 },
             )
             assert r1.status_code == 200
-            assert r1.json()["role"]["role_key"] == "finance"
+            assert r1.json()["role"]["role_key"] == "accountant"
 
             r2 = c.get("/api/auth/roles", headers=h)
             role_keys = [r["role_key"] for r in r2.json()["roles"]]
-            assert "finance" in role_keys
+            assert "accountant" in role_keys
 
     def test_create_role_duplicate_returns_409(self, rbac_store_and_admin):
         store, admin_token = rbac_store_and_admin
