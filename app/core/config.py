@@ -33,10 +33,10 @@ EMBEDDING_MODEL_NAME = "BAAI/bge-small-zh-v1.5"
 EMBEDDING_DEVICE = "cpu"
 
 # --- 本地大语言模型 (LLM) 配置 ---
-# Ollama 服务的 API 地址
-OLLAMA_API_URL = "http://localhost:11434/api/generate"
-# 本地运行的模型名称
-OLLAMA_MODEL_NAME = "huatuo_o1_7b"
+# Ollama 服务的 API 地址（支持通过环境变量指向远程 Ollama 实例）
+OLLAMA_API_URL = os.getenv("OLLAMA_API_URL", "http://localhost:11434/api/generate")
+# 本地运行的模型名称（可通过 .env 切换为 qwen2.5:3b 等替代模型）
+OLLAMA_MODEL_NAME = os.getenv("OLLAMA_MODEL_NAME", "huatuo_o1_7b")
 
 # --- 鉴权配置 ---
 # AUTH_TOKEN：所有 /api/* 和 /uploads/* 请求必须携带请求头 X-Auth-Token: <token>。
