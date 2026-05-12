@@ -103,7 +103,9 @@ body{ display: flex; flex-direction: column; }
 .collapse-head:hover{ background: rgba(15,23,42,0.03); }
 .collapse-head-left{ display: flex; align-items: center; gap: var(--sp-2); }
 .collapse-body{ max-height: 0; overflow: hidden; transition: max-height var(--dur-base) var(--ease); }
-.collapse-body.open{ max-height: 600px; }
+/* 档案信息展开后需要容纳 15+ 个字段（编号/姓名/身份证/紧急联系人/病史 等）。
+   原来 600px 会把病史/备注长文本截掉一半，调到 1600px 在所有屏幕都够用。 */
+.collapse-body.open{ max-height: 1600px; }
 .collapse-inner{ padding: 0 var(--sp-4) var(--sp-4); }
 .collapse-arrow{ transition: transform var(--dur-base) var(--ease); color: var(--ink-4); }
 .collapse-arrow.open{ transform: rotate(180deg); }
@@ -272,6 +274,24 @@ function authHeadersRaw(extra={}){
   if(t) h['X-Auth-Token'] = t;
   return h;
 }
+/**
+ * 把 401 / 403 单独拎出来做成人话提示，避免护工看到"生成失败"
+ * 以为是 AI 挂了反复点按钮，其实是 Token 没填 / 权限不够。
+ */
+async function describeHttpError(resp, fallback){
+  let body = {};
+  try{ body = await resp.clone().json(); }catch{}
+  const detail = body.detail || body.message || '';
+  if(resp.status === 401){
+    return getToken()
+      ? 'Token 已失效或被吊销，请在顶栏重新粘贴有效 API Token'
+      : '未登录：请先在顶栏粘贴有效 API Token';
+  }
+  if(resp.status === 403){
+    return '权限不足：' + (detail || '当前账号没有该操作权限，请联系管理员授权');
+  }
+  return detail || fallback || `请求失败（HTTP ${resp.status}）`;
+}
 
 /* ═══════════ STATE ═══════════ */
 let allPts = [];
@@ -328,6 +348,24 @@ function selectPt(pid){
 }
 
 function buildDetail(p){
+  // 小工具：只有值非空才渲染该信息格，避免出现一排 "—"。
+  // full 控制单条信息格是否跨两列（适合长文本：身份证 / 紧急联系 / 病史 / 备注）。
+  const infoCell = (label, value, full=false) => {
+    if(value == null || value === '') return '';
+    return `<div class="info-item${full?' full':''}"><div class="info-label">${esc(label)}</div><div class="info-value">${esc(value)}</div></div>`;
+  };
+  // 拼装紧急联系人一行，避免"张小明 ·  · 138xxxx"这种空洞分隔
+  const emergencyLine = (() => {
+    const parts = [];
+    if(p.emergency_contact) parts.push(p.emergency_contact);
+    if(p.emergency_relation) parts.push(`（${p.emergency_relation}）`);
+    if(p.emergency_phone) parts.push('· ' + p.emergency_phone);
+    return parts.join(' ');
+  })();
+  const heightWeight = (p.height_cm || p.weight_kg)
+    ? `${p.height_cm||'—'}cm / ${p.weight_kg||'—'}kg`
+    : '';
+
   return `
   <div class="glass patient-head">
     <div class="avatar">${esc((p.name||'?').slice(0,1))}</div>
@@ -346,18 +384,29 @@ function buildDetail(p){
     <div class="detail-main">
       <div class="glass collapse">
         <div class="collapse-head">
-          <div class="collapse-head-left"><span class="icon-s" data-icon="file"></span><span class="title-s">档案信息</span></div>
+          <div class="collapse-head-left"><span class="icon-s" data-icon="file"></span><span class="title-s">档案信息（完整）</span></div>
           <span class="icon-s collapse-arrow" data-icon="chevron-down"></span>
         </div>
         <div class="collapse-body">
           <div class="collapse-inner">
             <div class="info-grid">
-              <div class="info-item"><div class="info-label">血型</div><div class="info-value">${esc(p.blood_type||'—')}</div></div>
-              <div class="info-item"><div class="info-label">身高/体重</div><div class="info-value">${esc(p.height_cm||'—')}cm / ${esc(p.weight_kg||'—')}kg</div></div>
-              <div class="info-item"><div class="info-label">主管护士</div><div class="info-value">${esc(p.primary_nurse||'—')}</div></div>
-              <div class="info-item"><div class="info-label">紧急联系</div><div class="info-value">${esc(p.emergency_contact||'—')}${p.emergency_phone?' · '+esc(p.emergency_phone):''}</div></div>
-              <div class="info-item full"><div class="info-label">既往病史</div><div class="info-value">${esc(p.medical_history||'暂无记录')}</div></div>
-              ${p.notes ? `<div class="info-item full"><div class="info-label">备注</div><div class="info-value">${esc(p.notes)}</div></div>` : ''}
+              ${infoCell('编号', p.patient_id)}
+              ${infoCell('姓名', p.name)}
+              ${infoCell('年龄', p.age!=null ? p.age+'岁' : '')}
+              ${infoCell('性别', p.gender)}
+              ${infoCell('出生日期', p.birth_date)}
+              ${infoCell('身份证号', p.id_card, true)}
+              ${infoCell('血型', p.blood_type)}
+              ${infoCell('身高/体重', heightWeight)}
+              ${infoCell('护理级别', p.care_level)}
+              ${infoCell('床位号', p.bed_number)}
+              ${infoCell('主管护士', p.primary_nurse)}
+              ${infoCell('入院日期', p.admission_date)}
+              ${infoCell('过敏史', p.allergy, true)}
+              ${infoCell('饮食禁忌', p.diet_restriction, true)}
+              ${infoCell('紧急联系', emergencyLine, true)}
+              ${infoCell('既往病史', p.medical_history || '暂无记录', true)}
+              ${infoCell('备注', p.notes, true)}
             </div>
           </div>
         </div>
@@ -416,6 +465,17 @@ function initCollapses(){
       const open = body.classList.toggle('open');
       arr.classList.toggle('open', open);
     };
+  });
+  // 档案信息卡片默认展开：Q5 反馈「护工端应该能直接看到老人完整档案」，
+  // 现在字段扩了但仍然被折叠起来就失去意义，所以首次渲染时自动 open。
+  document.querySelectorAll('.collapse-head:not([data-auto-opened])').forEach(h => {
+    h.dataset.autoOpened = '1';
+    const body = h.nextElementSibling;
+    const arr = h.querySelector('.collapse-arrow');
+    if(body && !body.classList.contains('open')){
+      body.classList.add('open');
+      arr?.classList.add('open');
+    }
   });
 }
 
@@ -540,14 +600,14 @@ async function getTaskCard(pid){
       method:'POST', headers: authHeaders(),
       body: JSON.stringify({patient_id:pid, symptom, reporter:'护工端', location: curPt?.bed_number||'', n_results:3})
     });
-    if(!res.ok) throw new Error(await res.text());
+    if(!res.ok) throw new Error(await describeHttpError(res, '任务卡生成失败'));
     const d = await res.json();
     renderTaskCard(pid, d.task_card);
     await refreshMemoryPanel(pid);
     toast('任务卡已生成','success');
   }catch(e){
     console.error(e);
-    toast('任务卡生成失败：请确认本地 AI 服务已启动','error');
+    toast(e.message || '任务卡生成失败：请确认本地 AI 服务已启动','error');
   }finally{
     btn.disabled=false; txt.textContent='生成护理任务卡';
   }
