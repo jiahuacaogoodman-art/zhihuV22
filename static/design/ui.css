@@ -337,6 +337,21 @@ select.field{ appearance: none; background-image: url("data:image/svg+xml;utf8,<
 .icon  { width: 20px; height: 20px; stroke-width: 1.6; flex-shrink: 0; color: currentColor; }
 .icon-s{ width: 16px; height: 16px; stroke-width: 1.8; flex-shrink: 0; }
 .icon-l{ width: 24px; height: 24px; stroke-width: 1.6; flex-shrink: 0; }
+/* 防御：有些 fallback SVG 只带 viewBox 不带 width/height，SVG 规范下
+   缺省就会按 300×150 渲染，直接冲破 16/20/24 的容器，在"空态大图标"、
+   任务卡警告、护工卡这些地方会显示成一个巨大的图。统一强制 svg 子元素
+   占满容器，lucide 和 fallback 两路都能被兜住。 */
+.icon, .icon-s, .icon-l, .empty-icon{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.icon > svg, .icon-s > svg, .icon-l > svg, .empty-icon > svg{
+  width: 100%;
+  height: 100%;
+  display: block;
+}
 
 /* ── 证据面板 ────────────────────────────────────────── */
 .evidence-panel{

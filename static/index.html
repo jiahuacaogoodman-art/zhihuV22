@@ -34,9 +34,13 @@
 <script defer src="/static/pet/pet.js"></script>
 <style>
 /* ---- 页面级布局：桌面端左侧固定边栏 ----
-   · 设 app-shell 最大宽 1600px + 居中：超宽屏（2K / 4K / 21:9）时不再把内容横拉到屏幕边缘。
-   · 加浅色背景兜一下两侧留白，观感类似 Notion / Linear 的宽屏策略。 */
-.app-shell{ display: flex; min-height: 100dvh; align-items: stretch; max-width: 1600px; margin: 0 auto; background: rgba(255,255,255,0.02); }
+   · 侧栏必须贴着视窗最左侧（用户在超宽屏 / Win 笔电上反馈看到左边一条灰，
+     原因是这里原本对 .app-shell 做了 max-width:1600px + margin:0 auto，
+     超过 1600 时整个 shell 被居中，侧栏也跟着被推离屏幕左边）。
+   · 现在让 app-shell 占满视窗宽度，再把"宽屏留白"下沉到内容列：
+     - .sidebar 永远贴左
+     - .hero / .main 的内部 wrapper 有 max-width 居中，阅读体验不变 */
+.app-shell{ display: flex; min-height: 100dvh; align-items: stretch; width: 100%; background: rgba(255,255,255,0.02); }
 .page{ display: flex; flex-direction: column; min-height: 100dvh; }
 
 .sidebar{
@@ -146,8 +150,10 @@
 /* 左下角：桌面宠物已经改为固定在屏幕左下角，侧栏不再预留空位 */
 .sidebar-pet-slot{ display: none; }
 
-/* 内容列 */
-.content-col{ flex: 1; min-width: 0; }
+/* 内容列：不再居中整个 shell，而是在内容列内部做宽屏 cap。
+   max-width 1400 + 左侧留出一点呼吸空间 (padding-left: sp-2)，
+   右侧靠 .main/.hero 本身的 padding-right 即可。 */
+.content-col{ flex: 1; min-width: 0; max-width: 1400px; }
 
 /* Hero */
 .hero{ padding: var(--sp-4) var(--sp-5) 0; }
@@ -292,6 +298,37 @@
 .hist-list{ display: flex; flex-direction: column; gap: 4px; }
 .hist-row{ display: grid; grid-template-columns: 28px 1fr auto; gap: var(--sp-3); padding: var(--sp-3); border-radius: var(--r-s); background: rgba(255,255,255,0.70); border: 1px solid rgba(15,23,42,0.05); align-items: center; }
 .hist-dot{ width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+
+/* 角色卡片：角色权限 tab 用
+   以前复用 .hist-row + 内联 flex-direction:column，失败于 grid 优先，导致头部信息
+   被挤进 28px 第一列纵向排布。改用独立 class：纵向 stack + 头部 flex-wrap 一行。 */
+.role-card{
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: var(--sp-3);
+  border-radius: var(--r-s);
+  background: rgba(255,255,255,0.70);
+  border: 1px solid rgba(15,23,42,0.05);
+}
+.role-card-head{
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+/* 编辑 / 删除按钮挤到最右边 */
+.role-card-actions{
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.role-card-perms{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+}
 
 /* PWA banner */
 .pwa-banner{ position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 40; display: none; align-items: center; gap: var(--sp-3); padding: var(--sp-3) var(--sp-4); border-radius: var(--r-m); background: rgba(11,18,32,0.92); color: #fff; box-shadow: var(--shadow-4); max-width: calc(100% - 32px); }
@@ -1002,6 +1039,29 @@ function authHeadersRaw(extra={}){
   if(t) h['X-Auth-Token'] = t;
   return h;
 }
+/**
+ * 统一解析后端非 2xx 响应，返回一段对用户友好的错误信息。
+ * 核心目的：把"401 未登录 / 403 权限不足"从一坨笼统的"保存失败"里
+ * 摘出来，让用户看见后知道该先去左侧填 Token 或联系管理员授权，
+ * 而不是以为是业务出错反复重试。
+ * - 401 未携带 token 或 token 失效
+ * - 403 token 有效但所属角色缺少所需权限点（后端 detail 里带着缺了哪些）
+ * - 其他：优先吃后端的 detail/message，兜底 fallback
+ */
+async function describeHttpError(resp, fallback){
+  let body = {};
+  try{ body = await resp.clone().json(); }catch{}
+  const detail = body.detail || body.message || '';
+  if(resp.status === 401){
+    return getToken()
+      ? 'Token 已失效或被吊销，请在左侧重新粘贴有效 API Token'
+      : '未登录：请先在左侧粘贴有效 API Token';
+  }
+  if(resp.status === 403){
+    return '权限不足：' + (detail || '当前角色没有该操作的权限，请联系管理员在"角色权限"中授权');
+  }
+  return detail || fallback || `请求失败（HTTP ${resp.status}）`;
+}
 
 /* ═══════════ STATE ═══════════ */
 let curTab = 'add';
@@ -1165,7 +1225,7 @@ async function submitPatient(){
   };
   try{
     const r = await fetch('/api/ehr/patients', {method:'POST', headers: authHeaders(), body: JSON.stringify(data)});
-    if(!r.ok) throw new Error((await r.json()).detail || '保存失败');
+    if(!r.ok) throw new Error(await describeHttpError(r, '保存失败'));
     toast('档案保存成功','success');
     ['patient_id','name','age','birth_date','id_card','admission_date','emergency_contact','emergency_phone','emergency_relation','height_cm','weight_kg','medical_history','allergy','diet_restriction','notes'].forEach(k=>{ const e=document.getElementById(k); if(e) e.value=''; });
     ['gender','blood_type','care_level'].forEach(k=>{ const e=document.getElementById(k); if(e) e.value=''; });
@@ -1243,7 +1303,7 @@ async function delPt(pid, name){
   if(!ok) return;
   try{
     const r = await fetch(`/api/ehr/patients/${encodeURIComponent(pid)}`, {method:'DELETE', headers: authHeadersRaw()});
-    if(!r.ok) throw new Error('删除失败');
+    if(!r.ok) throw new Error(await describeHttpError(r, '删除失败'));
     toast(`已删除 ${name}`,'success');
     addHist('delete', `删除档案：${name}（${pid}）`);
     loadPatients();
@@ -1271,7 +1331,7 @@ async function openEdit(pid){
     Object.keys(vals).forEach(k=>{ if(vals[k] !== '') payload[k] = vals[k]; });
     if(payload.age !== undefined) payload.age = parseInt(payload.age) || null;
     const r2 = await fetch(`/api/ehr/patients/${encodeURIComponent(pid)}`, {method:'PUT', headers: authHeaders(), body: JSON.stringify(payload)});
-    if(!r2.ok) throw new Error('保存失败');
+    if(!r2.ok) throw new Error(await describeHttpError(r2, '保存失败'));
     toast('修改已保存','success');
     addHist('edit', `编辑档案：${vals.name||pid}`);
     loadPatients();
@@ -1316,8 +1376,8 @@ async function uploadMedicalRecords(){
   btn.disabled = true; txt.innerHTML = '<span class="ring"></span> 上传并识别中…';
   try{
     const r = await fetch('/api/ehr/records/upload', {method:'POST', headers: authHeadersRaw(), body: fd});
-    const d = await r.json();
-    if(!r.ok) throw new Error(d.detail || '上传失败');
+    const d = await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(await describeHttpError(r, d.detail || '上传失败'));
     const warn = (d.records||[]).some(x=>x.ocr_status !== 'ocr_success');
     toast(warn ? '照片已保存；部分文字未识别，可手动补充' : '病历和文字识别结果已保存','success');
     document.getElementById('record_files').value = '';
@@ -1388,8 +1448,8 @@ async function deleteMedicalRecord(docId, pid){
   if(!ok) return;
   try{
     const r = await fetch(`/api/ehr/records/${encodeURIComponent(docId)}`, {method:'DELETE', headers: authHeadersRaw()});
-    const d = await r.json();
-    if(!r.ok) throw new Error(d.detail || '删除失败');
+    const d = await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(await describeHttpError(r, d.detail || '删除失败'));
     toast('病历已删除','success');
     loadMedicalRecords(pid);
   }catch(e){ toast(e.message,'error'); }
@@ -1758,20 +1818,24 @@ async function loadRoles(){
         `<span class="chip chip-accent" style="margin:2px 4px 2px 0" title="${esc(p)}">${esc(permNameMap[p] || p)}</span>`
       ).join('');
       const isAdmin = r.role_key === 'admin';
+      // 注意：不能复用 .hist-row —— 它是 display:grid grid-template-columns:28px 1fr auto，
+      // 这里需要的是"头部一行 + 权限芯片自由换行"的纵向块，之前 style="flex-direction:column"
+      // 写在 grid 容器上是无效的，会把 display-name / 角色标识 / 系统内置 chip 全挤进
+      // 28px 的第一列里纵向串成豆腐干。用一个独立类 .role-card 表达自己的意图。
       return `
-      <div class="hist-row" style="flex-direction:column;align-items:stretch;gap:8px">
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-          <span class="hist-dot" style="background:${roleDotColor(r.role_key)}"></span>
+      <div class="role-card">
+        <div class="role-card-head">
+          <span class="hist-dot" style="background:${roleDotColor(r.role_key)};flex-shrink:0"></span>
           <strong class="body-s">${esc(r.display_name)}</strong>
           <span class="meta" style="color:var(--ink-4)">${esc(r.role_key)}</span>
-          ${r.system ? '<span class="chip chip-amber" style="margin-left:4px">系统内置</span>' : '<span class="chip chip-blue" style="margin-left:4px">自定义</span>'}
-          <span class="meta" style="margin-left:auto;display:flex;gap:6px">
+          ${r.system ? '<span class="chip chip-amber">系统内置</span>' : '<span class="chip chip-blue">自定义</span>'}
+          <span class="role-card-actions">
             <button class="btn btn-ghost btn-sm" onclick='openRoleEditor(${JSON.stringify(r.role_key)})'><span class="icon-s" data-icon="edit"></span>${isAdmin ? '查看' : '编辑'}</button>
             ${r.system ? '' : `<button class="btn btn-ghost btn-sm" onclick='confirmDeleteRole(${JSON.stringify(r.role_key)}, ${JSON.stringify(r.display_name)})'><span class="icon-s" data-icon="trash"></span>删除</button>`}
           </span>
         </div>
         ${r.description ? `<div class="meta" style="color:var(--ink-3)">${esc(r.description)}</div>` : ''}
-        <div style="display:flex;flex-wrap:wrap;gap:0">
+        <div class="role-card-perms">
           ${perms || '<span class="meta" style="color:var(--ink-4)">（无权限）</span>'}
         </div>
       </div>`;

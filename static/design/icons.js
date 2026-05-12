@@ -89,7 +89,9 @@
   function fallbackSvg(name){
     const body = FALLBACK[name];
     if(!body) return '';
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
+    // 显式写 width/height="100%"：否则某些浏览器会按 SVG 规范退化到 300x150
+    // 默认尺寸冲破 .icon/.icon-s 容器，表现为"警告变巨大"这类 bug。
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
   }
 
   /* ---------- 5. 主入口：mount ---------- */
@@ -112,6 +114,10 @@
           const svg = lucide.createElement(iconData);
           svg.setAttribute('stroke-width', '1.5');
           svg.setAttribute('aria-hidden', 'true');
+          // 让 SVG 永远跟着容器尺寸走（.icon=20, .icon-s=16, .icon-l=24）。
+          // Lucide 默认 width/height=24 会在 16px 容器里溢出 → 变成巨大图标。
+          svg.setAttribute('width', '100%');
+          svg.setAttribute('height', '100%');
           el.replaceChildren(svg);
           el.dataset.iconMounted = '1';
           return;
