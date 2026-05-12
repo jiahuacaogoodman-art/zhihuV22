@@ -16,8 +16,9 @@ from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, UploadF
 from loguru import logger
 
 from app.core.config import EHR_UPLOAD_DIR, MAX_UPLOAD_SIZE_MB, ALLOWED_UPLOAD_EXTENSIONS, BASE_DIR
-from app.middleware.auth import get_current_user, require_admin
+from app.middleware.auth import get_current_user, require_permission
 from app.services.audit_log import get_audit_log, _diff_meta
+from app.services.permissions import PERM_EHR_AUDIT_READ
 from app.services.pii_crypto import PII_FIELDS, encrypt_pii_fields, decrypt_pii_fields
 from app.services.user_store import User
 from app.models.schemas import (
@@ -576,12 +577,12 @@ async def delete_ehr(payload: EHRDeleteRequest, user: User = Depends(get_current
 
 
 # ── 操作审计日志查询 ─────────────────────────────────────────────
-@router.get("/ehr/audit", summary="查询操作审计日志（admin 专属）")
+@router.get("/ehr/audit", summary="查询操作审计日志（需要 ehr.audit_read 权限）")
 async def get_audit_log(
     patient_id: Optional[str] = None,
     action: Optional[str] = None,
     limit: int = 100,
-    _admin: User = Depends(require_admin),
+    _admin: User = Depends(require_permission(PERM_EHR_AUDIT_READ)),
 ):
     """
     返回档案操作审计记录（按时间倒序）。
