@@ -690,6 +690,7 @@
     <button class="nav-tab" data-tab="hist"><span class="icon-s" data-icon="history"></span>操作记录</button>
     <button class="nav-tab" data-tab="audit"><span class="icon-s" data-icon="shield"></span>审计日志</button>
     <button class="nav-tab" data-tab="users"><span class="icon-s" data-icon="key"></span>用户管理</button>
+    <button class="nav-tab" data-tab="roles"><span class="icon-s" data-icon="shield"></span>角色权限</button>
   </nav>
 
   <div class="section-hint">认证</div>
@@ -943,13 +944,31 @@
     <div class="form-grid cols-3">
       <label class="field-group"><span class="field-label">用户名<span class="req">*</span></span><input id="newUsername" class="field" placeholder="wang_nurse"></label>
       <label class="field-group"><span class="field-label">显示名</span><input id="newDisplayName" class="field" placeholder="王护士"></label>
-      <label class="field-group"><span class="field-label">角色<span class="req">*</span></span><select id="newRole" class="field"><option value="nurse">nurse</option><option value="caregiver">caregiver</option><option value="admin">admin</option></select></label>
+      <label class="field-group"><span class="field-label">角色<span class="req">*</span></span>
+        <select id="newRole" class="field">
+          <!-- 由 loadRolesForUserForm() 动态填充：内置角色 + 自定义角色 -->
+          <option value="nurse">nurse</option>
+        </select>
+      </label>
     </div>
     <div style="margin-top:var(--sp-3);display:flex;gap:8px;">
       <button class="btn btn-primary btn-sm" onclick="createUser()"><span class="icon-s" data-icon="plus"></span>创建用户</button>
     </div>
     <div class="section-label" style="margin-top:var(--sp-5)">已有用户</div>
     <div id="userList" class="hist-list"><div class="empty"><span class="empty-icon" data-icon="key"></span><div class="empty-title">加载中…</div></div></div>
+  </section>
+
+  <!-- 角色权限 -->
+  <section id="tab-roles" class="glass card" style="display:none;">
+    <div class="card-head">
+      <div class="card-head-icon"><span class="icon" data-icon="shield"></span></div>
+      <div class="card-head-text"><h2>角色权限</h2><p>可视化配置角色与权限点（需 roles.manage 权限）</p></div>
+      <div class="tools">
+        <button class="btn btn-primary btn-sm" onclick="openRoleEditor(null)"><span class="icon-s" data-icon="plus"></span>新建角色</button>
+      </div>
+    </div>
+    <!-- 角色列表：内置（不可删改 permissions）在前，自定义在后 -->
+    <div id="roleList" class="hist-list"><div class="empty"><span class="empty-icon" data-icon="shield"></span><div class="empty-title">加载中…</div></div></div>
   </section>
 
 </main>
@@ -1017,7 +1036,7 @@ function animateNumber(id, val){
 /* ═══════════ TABS ═══════════ */
 function switchTab(tab){
   document.querySelectorAll('.nav-tab').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
-  ['add','list','archive','dec','hist','audit','users'].forEach(t=>{
+  ['add','list','archive','dec','hist','audit','users','roles'].forEach(t=>{
     const el = document.getElementById('tab-'+t);
     if(el) el.style.display = (t===tab ? 'block' : 'none');
   });
@@ -1026,7 +1045,8 @@ function switchTab(tab){
   else if(tab==='dec') loadPatients().then(populateSel);
   else if(tab==='archive') loadPatients().then(()=>{ populateArchiveSel(); loadMedicalRecordsForSelected(); });
   else if(tab==='audit') loadAuditLog();
-  else if(tab==='users') loadUsers();
+  else if(tab==='users') { loadRolesForUserForm(); loadUsers(); }
+  else if(tab==='roles') loadRoles();
 }
 document.addEventListener('DOMContentLoaded', ()=>{
   // Restore token and check auth status
@@ -1525,6 +1545,12 @@ function renderHist(){
 function clearHistory(){ histLog = []; renderHist(); toast('操作记录已清空','info'); }
 
 /* ═══════════ AUTH CHECK ═══════════ */
+// 用户权限集合，供前端 UI 隐藏无权按钮（当前主要给"角色权限" tab 用：
+// 没 roles.manage 时直接在 tab 里显示一条提示，避免点了才 403）。
+// 值为 '*' 表示合成 user（disabled / legacy_token 模式），视为有全权。
+let currentUserPerms = new Set();
+function hasPerm(key){ return currentUserPerms.has('*') || currentUserPerms.has(key); }
+
 async function checkAuth(){
   const st = document.getElementById('authStatus');
   const t = getToken();
@@ -1533,11 +1559,16 @@ async function checkAuth(){
     const r = await fetch('/api/auth/me', {headers: authHeadersRaw()});
     if(r.ok){
       const d = await r.json();
-      if(st) st.innerHTML = `<span style="color:#5eead4">●</span> ${d.username} (${d.role})`;
+      // /api/auth/me 实际结构是 { user: {...}, permissions: [...], auth_mode, authenticated }
+      // 老代码直接读 d.username/d.role 是 bug——读到的是 undefined，显示"● undefined (undefined)"。
+      const u = d.user || {};
+      currentUserPerms = new Set(d.permissions || []);
+      if(st) st.innerHTML = `<span style="color:#5eead4">●</span> ${esc(u.username||'-')} (${esc(u.role||'-')})`;
     } else {
       if(st) st.textContent = 'Token 无效';
+      currentUserPerms = new Set();
     }
-  }catch(e){ if(st) st.textContent = '连接失败'; }
+  }catch(e){ if(st) st.textContent = '连接失败'; currentUserPerms = new Set(); }
 }
 
 /* ═══════════ 审计日志 ═══════════ */
@@ -1579,6 +1610,52 @@ async function loadAuditLog(){
 }
 
 /* ═══════════ 用户管理 ═══════════ */
+// roleMeta：全局角色表缓存，由 loadRolesForUserForm / loadRoles 维护
+// 结构：{ role_key: { display_name, system, permissions: [...] } }
+// 用途：列表渲染时把 'head_nurse_finance' 显示为 '护士长兼财务'
+let roleMeta = {};
+
+// 把内置 3 个 role_key 画成固定颜色；自定义角色统一用 chip-accent
+function roleChipClass(key){
+  if(key === 'admin') return 'chip-amber';
+  if(key === 'nurse') return 'chip-green';
+  if(key === 'caregiver') return 'chip-blue';
+  return 'chip-accent';
+}
+function roleDisplay(key){
+  const m = roleMeta[key];
+  return m && m.display_name ? m.display_name : key;
+}
+function roleDotColor(key){
+  if(key === 'admin') return '#f59e0b';
+  if(key === 'nurse') return '#14b8a6';
+  if(key === 'caregiver') return '#818cf8';
+  return '#5eead4';
+}
+
+// 给"创建用户"表单里的 <select id="newRole"> 动态填充所有可用角色。
+// 老版本写死了 nurse/caregiver/admin 三项，现在从 DB 读，自定义角色也能选。
+async function loadRolesForUserForm(){
+  try{
+    const r = await fetch('/api/auth/roles', {headers: authHeadersRaw()});
+    if(!r.ok) return; // 没 roles.manage 就保持下拉原样，不骚扰用户
+    const d = await r.json();
+    const roles = d.roles || [];
+    roleMeta = {};
+    roles.forEach(r => { roleMeta[r.role_key] = r; });
+    const sel = document.getElementById('newRole');
+    if(sel){
+      // 保留当前选中值，避免切 tab 时丢失
+      const cur = sel.value || 'nurse';
+      sel.innerHTML = roles.map(r =>
+        `<option value="${esc(r.role_key)}">${esc(r.display_name)} (${esc(r.role_key)})</option>`
+      ).join('');
+      // 找到原值保留；找不到就选第一个
+      if([...sel.options].some(o => o.value === cur)) sel.value = cur;
+    }
+  }catch(e){ /* 静默失败，下拉保持写死的三项 */ }
+}
+
 async function loadUsers(){
   const el = document.getElementById('userList');
   try{
@@ -1595,10 +1672,10 @@ async function loadUsers(){
     }
     el.innerHTML = users.map(u => `
       <div class="hist-row">
-        <span class="hist-dot" style="background:${u.role==='admin'?'#f59e0b':u.role==='nurse'?'#14b8a6':'#818cf8'}"></span>
+        <span class="hist-dot" style="background:${roleDotColor(u.role)}"></span>
         <span class="body-s">
           <strong>${esc(u.username)}</strong>${u.display_name?' · '+esc(u.display_name):''}
-          <span class="chip ${u.role==='admin'?'chip-amber':u.role==='nurse'?'chip-green':'chip-blue'}" style="margin-left:6px">${esc(u.role)}</span>
+          <span class="chip ${roleChipClass(u.role)}" style="margin-left:6px" title="${esc(u.role)}">${esc(roleDisplay(u.role))}</span>
           ${u.active===false?'<span class="chip chip-red" style="margin-left:4px">已停用</span>':''}
         </span>
         <span class="meta">
@@ -1637,6 +1714,264 @@ async function issueToken(userId, username){
   }catch(e){ toast(e.message,'error'); }
 }
 
+/* ═══════════ 角色权限管理 ═══════════ */
+// 全局权限点清单缓存（从 /api/auth/permissions 读）
+// 结构：{ by_category: { auth:[{perm_key,display_name,description},...], ehr:[...] } }
+let permsCatalog = null;
+const CATEGORY_LABELS = { auth: '认证与用户', ehr: '档案管理', nursing: '护理决策' };
+
+async function fetchPermsCatalog(){
+  if(permsCatalog) return permsCatalog;
+  const r = await fetch('/api/auth/permissions', {headers: authHeadersRaw()});
+  if(!r.ok) throw new Error('加载权限点清单失败');
+  const d = await r.json();
+  permsCatalog = d;
+  return d;
+}
+
+async function loadRoles(){
+  const el = document.getElementById('roleList');
+  try{
+    const r = await fetch('/api/auth/roles', {headers: authHeadersRaw()});
+    if(r.status === 403 || r.status === 401){
+      el.innerHTML = '<div class="empty"><span class="empty-icon" data-icon="shield"></span><div class="empty-title">需要 roles.manage 权限</div><div class="empty-sub">请在左侧填入管理员 Token</div></div>';
+      if(window.ZhIcons) window.ZhIcons.mount(el); return;
+    }
+    if(!r.ok) throw new Error('加载失败');
+    const d = await r.json();
+    const roles = d.roles || [];
+    // 同步更新 roleMeta，供用户管理列表展示中文名
+    roleMeta = {};
+    roles.forEach(r => { roleMeta[r.role_key] = r; });
+    if(!roles.length){
+      el.innerHTML = '<div class="empty"><div class="empty-title">暂无角色</div></div>'; return;
+    }
+    // 预取权限点清单，拿到中文名以美化 chip
+    let permNameMap = {};
+    try{
+      const cat = await fetchPermsCatalog();
+      (cat.permissions || []).forEach(p => { permNameMap[p.perm_key] = p.display_name; });
+    }catch(e){ /* 失败不影响角色列表渲染 */ }
+
+    el.innerHTML = roles.map(r => {
+      const perms = (r.permissions || []).map(p =>
+        `<span class="chip chip-accent" style="margin:2px 4px 2px 0" title="${esc(p)}">${esc(permNameMap[p] || p)}</span>`
+      ).join('');
+      const isAdmin = r.role_key === 'admin';
+      return `
+      <div class="hist-row" style="flex-direction:column;align-items:stretch;gap:8px">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span class="hist-dot" style="background:${roleDotColor(r.role_key)}"></span>
+          <strong class="body-s">${esc(r.display_name)}</strong>
+          <span class="meta" style="color:var(--ink-4)">${esc(r.role_key)}</span>
+          ${r.system ? '<span class="chip chip-amber" style="margin-left:4px">系统内置</span>' : '<span class="chip chip-blue" style="margin-left:4px">自定义</span>'}
+          <span class="meta" style="margin-left:auto;display:flex;gap:6px">
+            <button class="btn btn-ghost btn-sm" onclick='openRoleEditor(${JSON.stringify(r.role_key)})'><span class="icon-s" data-icon="edit"></span>${isAdmin ? '查看' : '编辑'}</button>
+            ${r.system ? '' : `<button class="btn btn-ghost btn-sm" onclick='confirmDeleteRole(${JSON.stringify(r.role_key)}, ${JSON.stringify(r.display_name)})'><span class="icon-s" data-icon="trash"></span>删除</button>`}
+          </span>
+        </div>
+        ${r.description ? `<div class="meta" style="color:var(--ink-3)">${esc(r.description)}</div>` : ''}
+        <div style="display:flex;flex-wrap:wrap;gap:0">
+          ${perms || '<span class="meta" style="color:var(--ink-4)">（无权限）</span>'}
+        </div>
+      </div>`;
+    }).join('');
+    if(window.ZhIcons) window.ZhIcons.mount(el);
+  }catch(e){
+    el.innerHTML = `<div class="empty"><div class="empty-title">${esc(e.message)}</div></div>`;
+  }
+}
+
+// 新建 / 编辑角色 Modal
+// 手写 overlay 而不是用 ZhDialog.prompt，因为 prompt 只支持 input 字段，
+// 权限勾选需要 checkbox 分组（by_category）+ 全选/清空按钮。
+async function openRoleEditor(roleKey){
+  // 数据源：若编辑，先拿当前角色；否则空结构
+  let role = null;
+  if(roleKey){
+    try{
+      const r = await fetch('/api/auth/roles', {headers: authHeadersRaw()});
+      if(!r.ok) throw new Error('读取角色失败');
+      const d = await r.json();
+      role = (d.roles || []).find(x => x.role_key === roleKey) || null;
+      if(!role){ toast('角色不存在','error'); return; }
+    }catch(e){ toast(e.message,'error'); return; }
+  }
+
+  let catalog;
+  try{ catalog = await fetchPermsCatalog(); }
+  catch(e){ toast(e.message,'error'); return; }
+
+  const isEdit = !!role;
+  const isAdmin = isEdit && role.role_key === 'admin';
+  const checkedSet = new Set(role ? (role.permissions || []) : []);
+
+  const ov = document.createElement('div');
+  ov.className = 'dialog-ov';
+  ov.setAttribute('role','dialog'); ov.setAttribute('aria-modal','true');
+  const box = document.createElement('div');
+  box.className = 'dialog';
+  // 角色编辑器比 prompt 大很多：3 个 section + N 个 checkbox，默认 min-width 撑不开
+  box.style.maxWidth = '640px';
+  box.style.width = 'min(96vw, 640px)';
+
+  // 按分类渲染权限点
+  const permSections = Object.keys(catalog.by_category || {}).map(cat => {
+    const items = catalog.by_category[cat] || [];
+    const label = CATEGORY_LABELS[cat] || cat;
+    const rows = items.map(p => {
+      const checked = checkedSet.has(p.perm_key) ? 'checked' : '';
+      const disabled = isAdmin ? 'disabled' : '';
+      return `<label class="perm-item" style="display:flex;gap:8px;align-items:flex-start;padding:6px 8px;border-radius:8px;cursor:${isAdmin?'not-allowed':'pointer'};transition:background .12s">
+        <input type="checkbox" data-perm="${esc(p.perm_key)}" ${checked} ${disabled} style="margin-top:3px;flex-shrink:0">
+        <span style="flex:1;min-width:0">
+          <span class="body-s"><strong>${esc(p.display_name)}</strong>
+            <span class="meta" style="color:var(--ink-4);margin-left:4px">${esc(p.perm_key)}</span>
+          </span>
+          <div class="meta" style="color:var(--ink-3);margin-top:1px">${esc(p.description || '')}</div>
+        </span>
+      </label>`;
+    }).join('');
+    return `
+      <div class="section-label" style="margin-top:var(--sp-3)">
+        ${esc(label)}
+        ${isAdmin ? '' : `
+          <span class="meta" style="margin-left:auto;display:flex;gap:4px">
+            <button type="button" class="btn btn-ghost btn-sm" data-cat-all="${esc(cat)}">全选</button>
+            <button type="button" class="btn btn-ghost btn-sm" data-cat-none="${esc(cat)}">清空</button>
+          </span>
+        `}
+      </div>
+      <div>${rows}</div>
+    `;
+  }).join('');
+
+  box.innerHTML = `
+    <div class="dialog-title">${isEdit ? (isAdmin ? '查看角色：' : '编辑角色：') + esc(role.display_name) : '新建自定义角色'}</div>
+    <div class="dialog-body" style="max-height:min(70vh,520px);overflow-y:auto;padding-right:4px">
+      <div class="form-grid cols-2" style="margin-bottom:var(--sp-2)">
+        <label class="field-group">
+          <span class="field-label">角色标识<span class="req">*</span></span>
+          <input id="_r_key" class="field" placeholder="例如 head_nurse_finance" value="${esc(role?.role_key || '')}" ${isEdit ? 'disabled' : ''}>
+          <span class="field-hint">只能英文字母、数字、下划线；创建后不可改</span>
+        </label>
+        <label class="field-group">
+          <span class="field-label">显示名称<span class="req">*</span></span>
+          <input id="_r_name" class="field" placeholder="例如 护士长兼财务" value="${esc(role?.display_name || '')}">
+        </label>
+      </div>
+      <label class="field-group" style="margin-bottom:var(--sp-2)">
+        <span class="field-label">描述</span>
+        <input id="_r_desc" class="field" placeholder="这个角色管什么（可留空）" value="${esc(role?.description || '')}">
+      </label>
+      ${isAdmin ? '<div class="meta" style="color:var(--accent-ink);padding:8px 12px;background:rgba(94,234,212,.1);border-radius:8px;margin-bottom:8px">⚠️ admin 是系统内置角色，拥有全部权限不可修改（防锁死）。显示名称和描述可改，权限勾选被禁用。</div>' : ''}
+      ${permSections}
+    </div>
+    <div class="dialog-actions">
+      <button type="button" class="btn btn-ghost" data-role-cancel>取消</button>
+      <button type="button" class="btn btn-primary" data-role-save ${isAdmin && !isEdit ? 'disabled' : ''}>${isEdit ? '保存' : '创建'}</button>
+    </div>
+  `;
+  ov.appendChild(box);
+  document.body.appendChild(ov);
+  if(window.ZhIcons) window.ZhIcons.mount(box);
+
+  const close = () => { ov.style.opacity='0'; setTimeout(()=>ov.remove(), 160); };
+  const cancelBtn = box.querySelector('[data-role-cancel]');
+  const saveBtn = box.querySelector('[data-role-save]');
+
+  cancelBtn.onclick = close;
+  ov.addEventListener('click', e => { if(e.target===ov) close(); });
+
+  // 全选 / 清空
+  box.querySelectorAll('[data-cat-all]').forEach(btn => {
+    btn.onclick = e => {
+      e.preventDefault();
+      const cat = btn.dataset.catAll;
+      (catalog.by_category[cat] || []).forEach(p => {
+        const cb = box.querySelector(`input[data-perm="${p.perm_key}"]`);
+        if(cb) cb.checked = true;
+      });
+    };
+  });
+  box.querySelectorAll('[data-cat-none]').forEach(btn => {
+    btn.onclick = e => {
+      e.preventDefault();
+      const cat = btn.dataset.catNone;
+      (catalog.by_category[cat] || []).forEach(p => {
+        const cb = box.querySelector(`input[data-perm="${p.perm_key}"]`);
+        if(cb) cb.checked = false;
+      });
+    };
+  });
+
+  saveBtn.onclick = async () => {
+    const key = box.querySelector('#_r_key').value.trim();
+    const name = box.querySelector('#_r_name').value.trim();
+    const desc = box.querySelector('#_r_desc').value.trim();
+    if(!key){ toast('角色标识不能为空','warning'); return; }
+    if(!name){ toast('显示名称不能为空','warning'); return; }
+    if(!/^[a-zA-Z0-9_]+$/.test(key)){ toast('角色标识只能用英文字母、数字、下划线','warning'); return; }
+
+    // 收集勾选的权限；admin 编辑时 checkbox 被 disabled，后端也会兜底
+    // （admin.permissions 在后端是 ProtectedRoleError，发过去也会 400）
+    // 所以 admin 编辑时不发 permissions 字段。
+    const permBoxes = [...box.querySelectorAll('input[data-perm]')];
+    const permissions = permBoxes.filter(cb => cb.checked).map(cb => cb.dataset.perm);
+
+    saveBtn.disabled = true; saveBtn.textContent = '保存中…';
+    try{
+      if(isEdit){
+        const body = { display_name: name, description: desc };
+        if(!isAdmin) body.permissions = permissions;
+        const r = await fetch(`/api/auth/roles/${encodeURIComponent(key)}`, {
+          method:'PATCH', headers: authHeaders(), body: JSON.stringify(body)
+        });
+        if(!r.ok){ const d = await r.json(); throw new Error(d.detail || d.message || '保存失败'); }
+        toast('角色已更新','success');
+      } else {
+        const r = await fetch('/api/auth/roles', {
+          method:'POST', headers: authHeaders(),
+          body: JSON.stringify({ role_key: key, display_name: name, description: desc, permissions })
+        });
+        if(!r.ok){ const d = await r.json(); throw new Error(d.detail || d.message || '创建失败'); }
+        toast('角色已创建','success');
+      }
+      close();
+      loadRoles();
+      // 若用户管理 tab 的下拉已加载过，也同步刷新
+      loadRolesForUserForm();
+    }catch(e){
+      toast(e.message,'error');
+      saveBtn.disabled = false; saveBtn.textContent = isEdit ? '保存' : '创建';
+    }
+  };
+}
+
+async function confirmDeleteRole(roleKey, displayName){
+  const ok = await window.ZhDialog?.confirm?.({
+    title: `删除角色"${displayName}"？`,
+    text: `此操作不可撤销。如果还有活跃用户使用该角色，后端会阻止删除。`,
+    confirmText: '删除',
+    cancelText: '取消',
+    danger: true,
+  });
+  if(!ok) return;
+  try{
+    const r = await fetch(`/api/auth/roles/${encodeURIComponent(roleKey)}`, {
+      method:'DELETE', headers: authHeadersRaw()
+    });
+    if(!r.ok){
+      const d = await r.json();
+      // 409 = 有活跃用户占用；400 = 内置角色保护；把后端的提示直接吐给用户
+      throw new Error(d.detail || d.message || '删除失败');
+    }
+    toast('角色已删除','success');
+    loadRoles();
+    loadRolesForUserForm();
+  }catch(e){ toast(e.message,'error'); }
+}
+
 /* ═══════════ PWA ═══════════ */
 if('serviceWorker' in navigator){ navigator.serviceWorker.register('/static/sw.js').catch(()=>{}); }
 let deferredPrompt = null;
@@ -1664,7 +1999,7 @@ switchTab = function(t){
   _origSwitchTab(t);
   if(window.ZhPet){
     // 根据 tab 给宠物不同反应
-    const map = { add: 'idle', list: 'idle', archive: 'idle', dec: 'talk', hist: 'idle', audit: 'idle', users: 'idle' };
+    const map = { add: 'idle', list: 'idle', archive: 'idle', dec: 'talk', hist: 'idle', audit: 'idle', users: 'idle', roles: 'idle' };
     const act = map[t];
     if(act === 'talk') window.ZhPet.say('准备好帮你写护理建议啦～', { title: '提示', duration: 2200 });
     else window.ZhPet.react('jump');
