@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
 """
 @File    : app/middleware/auth.py
-@Desc    : API Key 鉴权中间件（Phase 1：用户身份 + 审计 operator 贯通）
+@Desc    : API Key 鉴权中间件 + RBAC 权限检查依赖
 
 鉴权模式（启动时根据配置自动判定，运行时可通过 /api/auth/me 查看）
   1. user_store   —— 有 UserStore 且至少有一个 user（常态）
                      每个请求的 token → User，注入 request.state.user
   2. legacy_token —— 没有 UserStore 或 UserStore 为空，但 AUTH_TOKEN 非空
-                     单 token 匹配模式（向后兼容旧部署，极少出现：
-                     bootstrap_legacy_admin 会把 legacy token 自动注入 UserStore）
+                     单 token 匹配模式（向后兼容旧部署；bootstrap_legacy_admin
+                     会把 legacy token 自动注入 UserStore 后立刻切换到 user_store）
   3. disabled     —— AUTH_TOKEN 为空 且 UserStore 为空
                      全部放行，仅限开发/测试环境；注入一个 anonymous synthetic user
 
@@ -26,11 +26,20 @@ Token 传递
   请求头：  X-Auth-Token: <token>
   查询参数：?token=<token>   （供浏览器直接预览病历照片时使用）
 
-FastAPI 集成
-  路由层通过 Depends 注入当前用户:
-    from app.middleware.auth import get_current_user, require_admin
-    async def endpoint(user = Depends(get_current_user)):
+权限检查（推荐用法）
+  路由通过 Depends 注入当前用户 + 声明所需权限点：
+    from app.middleware.auth import get_current_user, require_permission
+    from app.services.permissions import PERM_EHR_WRITE
+
+    @router.post("/ehr/patients")
+    async def create_patient(
+        _user: User = Depends(require_permission(PERM_EHR_WRITE)),
+        ...,
+    ):
         ...
+
+  require_admin 作为兼容别名保留（等价于 require_permission("users.manage")）。
+  这让自定义角色只要勾选了 users.manage 就自动具备管理员能力，不必硬编码 "admin"。
 """
 
 from __future__ import annotations
@@ -43,6 +52,11 @@ from loguru import logger
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
+from app.services.permissions import (
+    PERM_ROLES_MANAGE,
+    PERM_TOKENS_MANAGE,
+    PERM_USERS_MANAGE,
+)
 from app.services.user_store import User, UserStore, ROLE_ADMIN
 
 
@@ -59,16 +73,27 @@ def _always_allow(path: str) -> bool:
     return path in _ALWAYS_ALLOW or not _is_protected(path)
 
 
-# ── 鉴权关闭时注入的合成 User ────────────────────────────
-# 用同一个 frozen User 对象避免每次请求创建；user_id 前缀 "anon_" 便于审计辨认。
+# ── 合成 User：鉴权关闭 / legacy 模式用 ─────────────────
+# 这两个合成 User 的 user_id 不在 UserStore 里，RBAC 权限查询会返回空集；
+# require_permission 需要通过 user_id 识别它们并 bypass（见 _is_bypass_user）。
+_SYNTHETIC_ANON_ID = "anon_dev"
+_SYNTHETIC_LEGACY_ADMIN_ID = "legacy_admin"
+_BYPASS_USER_IDS = frozenset({_SYNTHETIC_ANON_ID, _SYNTHETIC_LEGACY_ADMIN_ID})
+
+
 _ANONYMOUS_USER: User = User(
-    user_id="anon_dev",
+    user_id=_SYNTHETIC_ANON_ID,
     username="anonymous",
     display_name="(匿名 · 开发模式)",
-    role="admin",          # 鉴权关闭时本来就是无限制，这里给 admin 便于路由 require_admin 通过
+    role=ROLE_ADMIN,          # 与 bypass 规则保持一致：该 user 事实上拥有全权
     active=True,
     created_at="",
 )
+
+
+def _is_bypass_user(user: User) -> bool:
+    """disabled / legacy_token 模式的合成 user，在 RBAC 体系外，直接放行。"""
+    return user.user_id in _BYPASS_USER_IDS
 
 
 def _extract_token(request: Request) -> str:
@@ -95,28 +120,24 @@ class AuthTokenMiddleware(BaseHTTPMiddleware):
 
     @property
     def auth_mode(self) -> str:
-        """与 MeResponse.auth_mode 的 Literal 保持同步。"""
         if self._user_store is not None and self._user_store.has_users():
             return "user_store"
         if self._legacy_token:
             return "legacy_token"
         return "disabled"
 
-    # 供 /auth/me 等接口读取中间件状态（避免再查一次 DB）
     def describe(self) -> dict:
         return {"auth_mode": self.auth_mode}
 
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
 
-        # 不需要保护的路径：直接放行，并注入 anonymous user（路由里如果用了 Depends 仍能拿到对象）
         if _always_allow(path):
             request.state.user = _ANONYMOUS_USER
             return await call_next(request)
 
         mode = self.auth_mode
 
-        # 模式 3：鉴权关闭（仅开发）
         if mode == "disabled":
             request.state.user = _ANONYMOUS_USER
             return await call_next(request)
@@ -125,7 +146,6 @@ class AuthTokenMiddleware(BaseHTTPMiddleware):
         if not provided:
             return self._unauthorized("missing token")
 
-        # 模式 1：UserStore（常态）
         if mode == "user_store":
             assert self._user_store is not None
             user = self._user_store.resolve_token_to_user(provided)
@@ -134,11 +154,10 @@ class AuthTokenMiddleware(BaseHTTPMiddleware):
             request.state.user = user
             return await call_next(request)
 
-        # 模式 2：legacy 单 token（仅当 UserStore 未初始化或还没用户时生效）
+        # 模式 2：legacy 单 token
         if hmac.compare_digest(provided.encode(), self._legacy_token.encode()):
-            # 合成一个 admin synthetic user，让审计日志与路由保持统一接口
             request.state.user = User(
-                user_id="legacy_admin",
+                user_id=_SYNTHETIC_LEGACY_ADMIN_ID,
                 username="admin",
                 display_name="Legacy AUTH_TOKEN Admin",
                 role=ROLE_ADMIN,
@@ -151,7 +170,6 @@ class AuthTokenMiddleware(BaseHTTPMiddleware):
 
     @staticmethod
     def _unauthorized(reason: str) -> JSONResponse:
-        # 响应体里不区分"未提供 / 错误 / 已吊销"，避免给攻击者信号
         return JSONResponse(
             status_code=401,
             content={"code": 401, "message": "Unauthorized"},
@@ -161,23 +179,100 @@ class AuthTokenMiddleware(BaseHTTPMiddleware):
 
 # ── FastAPI Depends helpers ────────────────────────────
 def get_current_user(request: Request) -> User:
-    """
-    返回中间件注入的 User。
-
-    如果中间件没跑过（理论上不应发生：挂载顺序保证了中间件先于路由），
-    退化为 anonymous，以便测试中绕过中间件仍能使用此依赖。
-    """
+    """返回中间件注入的 User；中间件没跑过时退化为 anonymous。"""
     user = getattr(request.state, "user", None)
     if not isinstance(user, User):
         return _ANONYMOUS_USER
     return user
 
 
+def _get_user_permissions(request: Request, user: User) -> frozenset[str]:
+    """从 request.app.state.user_store 查当前 user 的权限集合；
+    合成用户或 store 未挂载时返回特殊 "*"（bypass sentinel，由调用方判断）。"""
+    if _is_bypass_user(user):
+        return frozenset({"*"})
+    store: Optional[UserStore] = getattr(request.app.state, "user_store", None)
+    if store is None:
+        # 没 UserStore：意味着中间件未配 store（测试场景 / 极简启动），
+        # 行为与 disabled 模式一致 —— 放行
+        return frozenset({"*"})
+    return store.get_user_permissions(user.user_id)
+
+
+def require_permission(*perm_keys: str):
+    """
+    工厂：生成一个 Depends，要求当前 user 拥有**所有**给定权限点（AND 语义）。
+
+    用法：
+        @router.post(...)
+        async def endpoint(_user: User = Depends(require_permission("ehr.write"))):
+            ...
+
+    行为：
+      - disabled / legacy_token 模式的合成 user：直接放行
+      - user_store 模式：查 UserStore.get_user_permissions（带 60s TTL 缓存）
+      - 缺任何一个所需权限点 → 403，返回缺失列表便于排错
+    """
+    required = set(perm_keys)
+
+    def _checker(request: Request, user: User = Depends(get_current_user)) -> User:
+        granted = _get_user_permissions(request, user)
+        # "*" sentinel：合成用户或无 store，bypass
+        if "*" in granted:
+            return user
+        missing = required - granted
+        if missing:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    f"权限不足：缺少 {sorted(missing)}。"
+                    f"请联系管理员在角色权限管理中授权。"
+                ),
+            )
+        return user
+
+    return _checker
+
+
+def require_any_permission(*perm_keys: str):
+    """
+    OR 语义版：满足任意一个即可。
+    现在代码里用不到，留着给未来那些"读或写都行"的混合接口。
+    """
+    candidates = set(perm_keys)
+
+    def _checker(request: Request, user: User = Depends(get_current_user)) -> User:
+        granted = _get_user_permissions(request, user)
+        if "*" in granted or (granted & candidates):
+            return user
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"权限不足：至少需要 {sorted(candidates)} 其中之一",
+        )
+
+    return _checker
+
+
+# ── 向后兼容别名 ─────────────────────────────────────────
+# require_admin 老语义：role == "admin"
+# 新语义：拥有 users.manage（"管理员该干的活：管用户"）
+# 内置 admin 角色天然拥有全部权限 → 语义兼容；
+# 自定义角色勾选了 users.manage 也能通过 → 符合 RBAC 设计初衷。
+require_admin = require_permission(PERM_USERS_MANAGE)
+
+
 def require_role(*roles: str):
-    """工厂：生成要求 user.role ∈ roles 的 Depends。"""
+    """
+    Deprecated：建议改用 require_permission。
+
+    保留此工厂仅为兼容外部代码。语义与老版一致：检查 user.role 字符串。
+    对合成 user（disabled / legacy）同样 bypass。
+    """
     allowed = set(roles)
 
     def _checker(user: User = Depends(get_current_user)) -> User:
+        if _is_bypass_user(user):
+            return user
         if user.role not in allowed:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -188,23 +283,12 @@ def require_role(*roles: str):
     return _checker
 
 
-# 常用快捷依赖
-require_admin = require_role(ROLE_ADMIN)
-
-
 # ── /uploads/* 预览审计中间件 ─────────────────────────────
 # 为什么要单独一个中间件：
 #   /uploads/* 由 Starlette StaticFiles 接管，不走 FastAPI 路由，
 #   无法像 /api/* 那样用 Depends(get_current_user) + audit.log() 记录读取。
 #   这里在 AuthTokenMiddleware 鉴权成功之后、StaticFiles 处理之前插一层，
 #   对 2xx 响应写 RECORD_PREVIEW 审计。
-#
-# 设计要点：
-#   · 只审计成功的 2xx 响应，404/403 不污染审计表（语义：已发生的访问）
-#   · 从 URL path 反推 patient_id（/uploads/<safe_patient_id>/photos/<file>）
-#     失败时 patient_id 留空，operator 仍然记录
-#   · 审计失败只 warning，不影响文件下载
-#   · 审计实例通过 get_audit_log() 惰性获取，避免 import 时序问题
 class ReadAuditMiddleware(BaseHTTPMiddleware):
     """对 /uploads/* 的 GET 请求记 RECORD_PREVIEW 审计。"""
 
@@ -213,7 +297,6 @@ class ReadAuditMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
 
-        # 只审计：GET /uploads/* 且响应成功（2xx）
         if (
             request.method != "GET"
             or not request.url.path.startswith(self._PREFIX)
@@ -221,21 +304,16 @@ class ReadAuditMiddleware(BaseHTTPMiddleware):
         ):
             return response
 
-        # 鉴权中间件保证 /uploads/* 必然有 request.state.user；防御性兜底
         user = getattr(request.state, "user", None)
         if not isinstance(user, User):
             return response
 
-        # 解析 patient_id：/uploads/<safe_patient_id>/photos/<filename>
-        # safe_patient_id 是 _safe_filename() 的结果（可能与原始 patient_id 不完全一致），
-        # 但足以审计追溯；对不上的情况留空
         path_tail = request.url.path[len(self._PREFIX):]
         segments = path_tail.split("/", 1)
         patient_id = segments[0] if segments and segments[0] else ""
         filename = segments[1] if len(segments) > 1 else path_tail
 
         try:
-            # 惰性导入 + 惰性获取 singleton，避免循环依赖 / 启动时序问题
             from app.services.audit_log import get_audit_log
             get_audit_log().log(
                 "RECORD_PREVIEW",
@@ -253,6 +331,8 @@ __all__ = [
     "AuthTokenMiddleware",
     "ReadAuditMiddleware",
     "get_current_user",
-    "require_role",
+    "require_permission",
+    "require_any_permission",
     "require_admin",
+    "require_role",  # deprecated 但保留
 ]
