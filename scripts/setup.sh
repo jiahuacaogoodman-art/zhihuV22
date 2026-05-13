@@ -437,17 +437,25 @@ echo ""
 
 # 构建 compose 命令
 COMPOSE_FILES="-f docker-compose.yml"
+COMPOSE_PROFILES=""
 if [[ "$HAS_GPU" == "true" ]]; then
     COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.gpu.yml"
     info "启用 GPU overlay"
 fi
+if [[ "$LLM_PROVIDER" == "ollama" ]]; then
+    COMPOSE_PROFILES="--profile ollama"
+    info "启用本地 Ollama（首次需下载模型，约 5-20 分钟）"
+else
+    info "使用远程 API，跳过 Ollama 容器（节省 ~5 GB 磁盘 + 内存）"
+fi
 
-info "正在启动服务（首次需要构建镜像 + 下载模型，请耐心等待）..."
+COMPOSE_UP_CMD="$COMPOSE_CMD $COMPOSE_FILES $COMPOSE_PROFILES up -d"
+info "正在启动服务..."
 echo ""
-echo -e "  ${BOLD}$ $COMPOSE_CMD $COMPOSE_FILES up -d${NC}"
+echo -e "  ${BOLD}$ ${COMPOSE_UP_CMD}${NC}"
 echo ""
 
-$COMPOSE_CMD $COMPOSE_FILES up -d 2>&1 | sed 's/^/  /'
+$COMPOSE_UP_CMD 2>&1 | sed 's/^/  /'
 
 echo ""
 success "容器已启动"
