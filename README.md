@@ -97,15 +97,17 @@ chmod +x scripts/setup.sh && ./scripts/setup.sh
 
 ---
 
-### 🇨🇳 国内网络部署（无梯子）
+### 🇨🇳 国内网络部署（无梯子，3 行搞定）
 
 ```bash
+git clone https://ghproxy.net/https://github.com/jiahuacaogoodman-art/Zhihu-Yinban.git
+cd Zhihu-Yinban
 chmod +x scripts/setup-cn.sh && ./scripts/setup-cn.sh
 ```
 
-自动走清华 APT 镜像 + hf-mirror.com，零交互直接起服务。LLM 后端自由选择——本地 Ollama 或远程 API（DeepSeek / 智谱 / vLLM 等），编辑 `.env` 中 `LLM_PROVIDER` 即可切换。
+全自动：ghproxy 加速克隆 + 清华 APT 镜像 + hf-mirror.com + 生成密钥 + 启动服务。LLM 后端自由选择——本地 Ollama 或远程 API（DeepSeek / 智谱 / vLLM），编辑 `.env` 中 `LLM_PROVIDER` 即可切换。
 
-> **Docker Hub 慢？** 在 Docker Desktop 设置或 `/etc/docker/daemon.json` 加 `{"registry-mirrors":["https://docker.mirrors.ustc.edu.cn"]}`，重启 Docker 后重跑。
+> **Docker Hub 慢？** Docker Desktop 设置加 `{"registry-mirrors":["https://docker.mirrors.ustc.edu.cn"]}`，重启后重跑。
 
 ---
 
