@@ -26,6 +26,7 @@ from app.core.config import (
     EMBEDDING_DEVICE,
     EHR_UPLOAD_DIR,
     AUTH_TOKEN,
+    LLM_PROVIDER,
 )
 from app.middleware.auth import AuthTokenMiddleware, ReadAuditMiddleware
 from app.routers import auth as auth_router
@@ -274,6 +275,7 @@ async def health_check():
         # 运维可观测 ─────────────────────────────────────────
         "pii_encryption_enabled": is_encryption_enabled(),
         "auth_mode": getattr(app.state, "auth_mode", "unknown"),
+        "llm_provider": LLM_PROVIDER,  # ollama / openai
     }
 
 
