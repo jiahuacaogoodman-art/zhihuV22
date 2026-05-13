@@ -24,6 +24,8 @@ from app.core.config import (
     CHROMA_COLLECTION_NAME,
     EMBEDDING_MODEL_NAME,
     EMBEDDING_DEVICE,
+    EMBEDDING_MODEL_LOCAL_PATH,
+    EMBEDDING_ALLOW_DEGRADED,
     EHR_UPLOAD_DIR,
     AUTH_TOKEN,
     LLM_PROVIDER,
@@ -81,6 +83,12 @@ else:
 async def lifespan(app: FastAPI):
     """
     FastAPI 应用的生命周期事件，在应用启动时执行初始化，在应用关闭时执行清理。
+
+    启动韧性设计：
+      - ChromaDB 初始化失败 → 仍然致命（无法存取任何档案）
+      - Embedding 模型加载失败 → 如果 EMBEDDING_ALLOW_DEGRADED=true，
+        应用降级启动（RAG 检索不可用，但基础 LLM 对话仍可用）
+      - 启动前会做 preflight 检查（缓存目录可写性、模型路径存在性）
     """
     # --- 应用启动时 ---
     logger.info("应用启动中...")
@@ -106,25 +114,132 @@ async def lifespan(app: FastAPI):
         logger.error(f"ChromaDB 初始化失败: {e}")
         raise RuntimeError(f"ChromaDB 初始化失败: {e}") from e
 
-    # 3. 加载 Embedding 模型
-    logger.info(f"正在加载 Embedding 模型: {EMBEDDING_MODEL_NAME}，使用设备: {EMBEDDING_DEVICE}")
+    # 3. 加载 Embedding 模型（带 preflight 检查和降级能力）
+    embedding_loaded = False
+    model_path = EMBEDDING_MODEL_LOCAL_PATH or EMBEDDING_MODEL_NAME
+
+    # ── Preflight 检查 ──
+    _preflight_embedding()
+
+    logger.info(f"正在加载 Embedding 模型: {model_path}，使用设备: {EMBEDDING_DEVICE}")
     try:
-        embedding_function = SentenceTransformer(EMBEDDING_MODEL_NAME, device=EMBEDDING_DEVICE)
+        embedding_function = SentenceTransformer(model_path, device=EMBEDDING_DEVICE)
         app_state["embedding_function"] = embedding_function
         app_state["db_collection"].embedding_function = embedding_function
+        app_state["rag_available"] = True
+        embedding_loaded = True
         logger.success("Embedding 模型加载成功！")
     except Exception as e:
-        logger.error(f"Embedding 模型加载失败: {e}")
-        logger.warning("请确保模型 'BAAI/bge-small-zh-v1.5' 已被下载并可在 sentence-transformers 中访问。")
-        raise RuntimeError(f"Embedding 模型加载失败: {e}") from e
+        error_msg = _classify_embedding_error(e)
+        logger.error(f"Embedding 模型加载失败: {error_msg}")
 
-    logger.info("所有核心模块初始化完成，应用准备就绪！")
+        if EMBEDDING_ALLOW_DEGRADED:
+            logger.warning(
+                "⚠️  降级模式启动：RAG 向量检索功能不可用，但基础 LLM 对话仍正常。\n"
+                "    修复建议：\n"
+                "    1. 确认缓存目录可写: HF_HOME / SENTENCE_TRANSFORMERS_HOME\n"
+                "    2. 设置 EMBEDDING_MODEL_LOCAL_PATH 指向本地模型目录（离线部署）\n"
+                "    3. 确认网络可访问 huggingface.co（首次下载）\n"
+                "    4. 设置 EMBEDDING_ALLOW_DEGRADED=false 可恢复严格模式（启动失败即退出）"
+            )
+            app_state["embedding_function"] = None
+            app_state["rag_available"] = False
+        else:
+            raise RuntimeError(f"Embedding 模型加载失败: {error_msg}") from e
+
+    if embedding_loaded:
+        logger.info("所有核心模块初始化完成，应用准备就绪！")
+    else:
+        logger.warning("应用以降级模式启动（RAG 不可用）— 基础功能正常")
+
     yield
 
     # --- 应用关闭时 ---
     logger.info("应用关闭中...")
     app_state.clear()
     logger.info("资源已清理，应用已关闭。")
+
+
+def _preflight_embedding():
+    """
+    Embedding 加载前的预检查，提前给出结构化的诊断信息。
+    不会抛异常，只输出 warning/info 级别日志。
+    """
+    import os as _os
+
+    # 检查缓存目录可写性
+    cache_dirs = {
+        "HF_HOME": _os.environ.get("HF_HOME", ""),
+        "SENTENCE_TRANSFORMERS_HOME": _os.environ.get("SENTENCE_TRANSFORMERS_HOME", ""),
+        "XDG_CACHE_HOME": _os.environ.get("XDG_CACHE_HOME", ""),
+    }
+    for env_name, dir_path in cache_dirs.items():
+        if not dir_path:
+            continue
+        p = Path(dir_path)
+        if p.exists() and not _os.access(str(p), _os.W_OK):
+            logger.warning(
+                f"⚠️  Preflight: 缓存目录不可写 {env_name}={dir_path}\n"
+                f"    Embedding 模型下载/加载将失败。请 chown 或挂载为可写卷。"
+            )
+        elif not p.exists():
+            logger.info(f"Preflight: 缓存目录不存在 {env_name}={dir_path}，将尝试自动创建")
+            try:
+                p.mkdir(parents=True, exist_ok=True)
+                logger.info(f"  → 已创建 {dir_path}")
+            except OSError as e:
+                logger.warning(f"  → 创建失败: {e}")
+
+    # 检查本地模型路径（如果指定了 EMBEDDING_MODEL_LOCAL_PATH）
+    if EMBEDDING_MODEL_LOCAL_PATH:
+        local_p = Path(EMBEDDING_MODEL_LOCAL_PATH)
+        if not local_p.exists():
+            logger.warning(
+                f"⚠️  Preflight: EMBEDDING_MODEL_LOCAL_PATH={EMBEDDING_MODEL_LOCAL_PATH} 不存在。\n"
+                f"    模型加载将失败。请确认模型文件已下载到该路径。"
+            )
+        elif not (local_p / "config.json").exists():
+            logger.warning(
+                f"⚠️  Preflight: {EMBEDDING_MODEL_LOCAL_PATH} 中未找到 config.json。\n"
+                f"    可能不是有效的 sentence-transformers 模型目录。"
+            )
+        else:
+            logger.info(f"Preflight: 本地模型路径有效 → {EMBEDDING_MODEL_LOCAL_PATH}")
+
+
+def _classify_embedding_error(e: Exception) -> str:
+    """
+    将 embedding 加载异常分类为人类可读的诊断信息。
+    """
+    msg = str(e)
+    if "Permission denied" in msg:
+        return (
+            f"权限不足 — 缓存目录不可写。\n"
+            f"    原始错误: {msg}\n"
+            f"    修复: 设置 HF_HOME/SENTENCE_TRANSFORMERS_HOME 到可写目录，或 chown 当前目录"
+        )
+    elif "No space left" in msg:
+        return (
+            f"磁盘空间不足。\n"
+            f"    原始错误: {msg}\n"
+            f"    修复: 清理磁盘或扩容，embedding 模型约需 100-500 MB"
+        )
+    elif "ConnectionError" in msg or "HTTPSConnectionPool" in msg or "resolve" in msg.lower():
+        return (
+            f"网络连接失败 — 无法从 HuggingFace 下载模型。\n"
+            f"    原始错误: {msg}\n"
+            f"    修复: (1) 确认容器可访问 huggingface.co\n"
+            f"          (2) 或设置 EMBEDDING_MODEL_LOCAL_PATH 指向预下载的模型目录\n"
+            f"          (3) 或配置 HF_ENDPOINT=https://hf-mirror.com（国内镜像）"
+        )
+    elif "not a valid model" in msg.lower() or "config.json" in msg.lower():
+        return (
+            f"模型文件无效或不完整。\n"
+            f"    原始错误: {msg}\n"
+            f"    修复: 删除缓存重新下载，或指定正确的 EMBEDDING_MODEL_LOCAL_PATH"
+        )
+    else:
+        return f"{msg}"
 
 
 # 创建 FastAPI 应用实例
@@ -265,6 +380,7 @@ async def health_check():
     Phase 1B 起新增运维可观测字段：
       pii_encryption_enabled  布尔，Fernet 加密当前是否生效（密钥配置 + 库可用）
       auth_mode               user_store / legacy_token / disabled
+      rag_available           布尔，RAG 向量检索是否可用（embedding 模型是否加载成功）
     """
     return {
         "status": "ok",
@@ -276,6 +392,7 @@ async def health_check():
         "pii_encryption_enabled": is_encryption_enabled(),
         "auth_mode": getattr(app.state, "auth_mode", "unknown"),
         "llm_provider": LLM_PROVIDER,  # ollama / openai
+        "rag_available": app_state.get("rag_available", False),
     }
 
 

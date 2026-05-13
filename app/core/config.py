@@ -28,9 +28,17 @@ ALLOWED_UPLOAD_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", "
 # --- Embedding 模型配置 ---
 # 使用轻量级、高效的中文向量模型，确保在无 GPU 环境下也能流畅运行
 # 备选模型: 'shibing624/text2vec-base-chinese'
-EMBEDDING_MODEL_NAME = "BAAI/bge-small-zh-v1.5"
+EMBEDDING_MODEL_NAME: str = os.getenv("EMBEDDING_MODEL_NAME", "BAAI/bge-small-zh-v1.5")
 # 建议在支持 CUDA 的环境中将设备设为 'cuda'
-EMBEDDING_DEVICE = "cpu"
+EMBEDDING_DEVICE: str = os.getenv("EMBEDDING_DEVICE", "cpu")
+# 可选：指向本地已下载的模型目录，跳过网络下载
+# 例如：/models/bge-small-zh-v1.5
+EMBEDDING_MODEL_LOCAL_PATH: str = os.getenv("EMBEDDING_MODEL_LOCAL_PATH", "")
+# 是否允许 embedding 加载失败时降级启动（RAG 功能不可用，但基础 LLM 仍可用）
+# 设为 "true" / "1" / "yes" 允许降级；默认 "true" 允许降级启动
+EMBEDDING_ALLOW_DEGRADED: bool = os.getenv(
+    "EMBEDDING_ALLOW_DEGRADED", "true"
+).strip().lower() in {"true", "1", "yes"}
 
 # --- 大语言模型 (LLM) 配置 ---
 # 项目支持两种 provider：
