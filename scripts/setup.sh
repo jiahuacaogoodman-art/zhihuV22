@@ -173,6 +173,7 @@ if [ -f "$ENV_FILE" ] && grep -q "^AUTH_TOKEN=.\+" "$ENV_FILE" 2>/dev/null; then
     if [[ "$keep_token" =~ ^[Nn] ]]; then
         AUTH_TOKEN=$(openssl rand -hex 32)
         success "已生成新 AUTH_TOKEN"
+        echo -e "    ${YELLOW}${AUTH_TOKEN}${NC}"
     else
         AUTH_TOKEN="$EXISTING_TOKEN"
         success "保留现有 AUTH_TOKEN"
@@ -190,6 +191,9 @@ else
     else
         AUTH_TOKEN=$(openssl rand -hex 32)
         success "已自动生成 AUTH_TOKEN"
+        echo -e "    ${YELLOW}${AUTH_TOKEN}${NC}"
+        echo ""
+        echo -e "    ${RED}⚠ 请立即复制保存，部署完成后也会再次显示。${NC}"
     fi
 fi
 echo ""
@@ -207,6 +211,7 @@ if [ -f "$ENV_FILE" ] && grep -q "^PII_ENCRYPTION_KEY=.\+" "$ENV_FILE" 2>/dev/nu
     if [[ "$keep_pii" =~ ^[Nn] ]]; then
         PII_ENCRYPTION_KEY=$(python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" 2>/dev/null || openssl rand -base64 32)
         success "已生成新 PII_ENCRYPTION_KEY"
+        echo -e "    ${YELLOW}${PII_ENCRYPTION_KEY}${NC}"
     else
         PII_ENCRYPTION_KEY="$EXISTING_PII"
         success "保留现有 PII_ENCRYPTION_KEY"
@@ -221,6 +226,7 @@ else
         warn "本机无 cryptography 库，使用 openssl 生成密钥（Docker 内会正常工作）"
     fi
     success "已自动生成 PII_ENCRYPTION_KEY"
+    echo -e "    ${YELLOW}${PII_ENCRYPTION_KEY}${NC}"
 fi
 echo ""
 
