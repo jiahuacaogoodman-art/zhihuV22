@@ -2,21 +2,27 @@
 # 智护银伴 · Dockerfile
 # 多阶段构建：builder 安装依赖 → runtime 精简镜像
 #
-# 构建：
-#   docker build -t zhihu-yinban:latest .
+# 推荐用法 ─ 直接用项目根目录的 docker-compose.yml 一键拉起：
+#   docker compose up -d
 #
-# 运行（最小化示例，token 务必换成随机字符串）：
+# 单独构建/运行（手动模式）：
+#   docker build -t zhihu-yinban:latest .
 #   docker run -d \
 #     -p 8000:8000 \
 #     -e AUTH_TOKEN=$(openssl rand -hex 32) \
-#     -v /data/yinban/ehr_db:/app/local_ehr_db \
-#     -v /data/yinban/uploads:/app/local_ehr_uploads \
-#     -v /data/yinban/events:/app/local_nursing_events \
+#     -e PII_ENCRYPTION_KEY=$(python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())") \
+#     -e OLLAMA_API_URL=http://host.docker.internal:11434/api/generate \
+#     -v yinban_ehr_db:/app/local_ehr_db \
+#     -v yinban_ehr_uploads:/app/local_ehr_uploads \
+#     -v yinban_auth:/app/local_auth \
+#     -v yinban_audit_log:/app/local_audit_log \
+#     -v yinban_nursing_events:/app/local_nursing_events \
+#     --add-host=host.docker.internal:host-gateway \
 #     --name yinban \
 #     zhihu-yinban:latest
 #
 # 注意：
-#   - Ollama / bge 模型在容器外运行，或挂载 ~/.ollama 和 HF 缓存目录
+#   - Ollama 通常跑在容器外。容器内访问宿主 Ollama 需要 host.docker.internal
 #   - 生产环境请绑定内网地址，不要直接暴露 8000 端口到公网
 # ============================================================
 
@@ -64,8 +70,11 @@ RUN groupadd -r yinban && useradd -r -g yinban -d /app yinban
 COPY --chown=yinban:yinban . .
 
 # 数据目录（挂载卷）
-RUN mkdir -p local_ehr_db local_ehr_uploads local_nursing_events \
-    && chown -R yinban:yinban local_ehr_db local_ehr_uploads local_nursing_events
+# 注意：容器以非 root yinban 用户运行，所有挂载点必须在切换用户前创建并 chown，
+#      否则 docker volume 首次挂载会以 root:root 出现，yinban 写不进去导致启动失败。
+RUN mkdir -p local_ehr_db local_ehr_uploads local_nursing_events local_auth local_audit_log \
+    && chown -R yinban:yinban \
+        local_ehr_db local_ehr_uploads local_nursing_events local_auth local_audit_log
 
 USER yinban
 
@@ -73,14 +82,18 @@ USER yinban
 ENV HOST=0.0.0.0 \
     PORT=8000 \
     RELOAD=0 \
+    WORKERS=1 \
     AUTH_TOKEN="" \
+    PII_ENCRYPTION_KEY="" \
+    OLLAMA_API_URL=http://host.docker.internal:11434/api/generate \
+    OLLAMA_MODEL_NAME=hf.co/mradermacher/HuatuoGPT-o1-7B-GGUF:Q4_K_M \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
+    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health',timeout=5).status==200 else 1)"
 
-# uvicorn 直接启动（不走 python main.py，避免双重进程）
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+# 用 sh -c 让 $WORKERS 可以被 docker run -e WORKERS=4 覆盖
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port 8000 --workers ${WORKERS:-1}"]

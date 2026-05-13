@@ -1,0 +1,26 @@
+# ============================================================
+# 智护银伴 · GPU overlay
+# 仅在你有 NVIDIA GPU + nvidia-container-toolkit 时使用。
+#
+# 用法 / Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+#
+# 它会把 ollama 服务接入 GPU 设备。
+# 校验：docker exec yinban-ollama nvidia-smi
+# ============================================================
+
+services:
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all          # 用所有可见 GPU；改成数字（如 1）只用 N 张
+              capabilities: [gpu]
+    environment:
+      # GPU 模式下可加载更多模型
+      OLLAMA_MAX_LOADED_MODELS: "2"
+      # 让 Ollama 看到所有 GPU；指定特定卡用 "0,1"
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
