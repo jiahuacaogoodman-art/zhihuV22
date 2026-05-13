@@ -97,114 +97,15 @@ chmod +x scripts/setup.sh && ./scripts/setup.sh
 
 ---
 
-### 🇨🇳 国内网络部署指南（无代理 / 无 VPN 环境）
-
-> 国内直连 Docker Hub、GitHub、HuggingFace 经常超时或 502，以下方案帮你绕过。
-
-#### 方案 0：国内专用一键脚本（零交互）
+### 🇨🇳 国内网络部署（无梯子）
 
 ```bash
 chmod +x scripts/setup-cn.sh && ./scripts/setup-cn.sh
 ```
 
-自动走清华 APT 镜像 + hf-mirror.com，不问问题直接起服务。`.env` 里可自由选 Ollama 或远程 API（DeepSeek/智谱/vLLM）。
+自动走清华 APT 镜像 + hf-mirror.com，零交互直接起服务。LLM 后端自由选择——本地 Ollama 或远程 API（DeepSeek / 智谱 / vLLM 等），编辑 `.env` 中 `LLM_PROVIDER` 即可切换。
 
-#### 方案 1：setup.sh 内置加速（最简单）
-
-运行 `./scripts/setup.sh` 后，在 **Step 6 构建选项** 中选 `[2] 国内加速`，脚本会自动：
-- 使用清华 APT 镜像（`mirrors.tuna.tsinghua.edu.cn`）加速 Debian 包下载
-- 跳过强制拉取基础镜像（使用本地缓存）
-
-#### 方案 2：手动指定镜像源构建
-
-```bash
-# 构建时指定清华 APT 镜像
-docker compose build --build-arg APT_MIRROR=https://mirrors.tuna.tsinghua.edu.cn
-
-# 启动（不再 pull 远程镜像）
-docker compose up -d
-```
-
-#### 方案 3：Docker Hub 镜像加速
-
-在 Docker Desktop 设置或 `/etc/docker/daemon.json` 中添加镜像：
-
-```json
-{
-  "registry-mirrors": [
-    "https://docker.mirrors.ustc.edu.cn",
-    "https://hub-mirror.c.163.com"
-  ]
-}
-```
-
-然后重启 Docker：`sudo systemctl restart docker`
-
-#### 方案 4：HuggingFace 模型下载加速
-
-Embedding 模型（`bge-small-zh-v1.5`）首次启动需从 HuggingFace 下载。国内可用镜像站：
-
-```bash
-# 在 .env 中添加（或设置为系统环境变量）
-HF_ENDPOINT=https://hf-mirror.com
-```
-
-或者提前手动下载模型到本地，然后告诉应用直接用本地路径：
-
-```bash
-# 1. 通过 hf-mirror 下载模型（约 100MB）
-git clone https://hf-mirror.com/BAAI/bge-small-zh-v1.5 /path/to/bge-small-zh-v1.5
-
-# 2. 配置应用使用本地模型（.env 中添加）
-EMBEDDING_MODEL_LOCAL_PATH=/path/to/bge-small-zh-v1.5
-```
-
-Docker 部署时挂载本地模型目录：
-
-```bash
-# docker-compose.yml 的 app.volumes 中添加：
-#   - /path/to/bge-small-zh-v1.5:/models/bge-small-zh-v1.5:ro
-# 然后 .env 中设置：
-#   EMBEDDING_MODEL_LOCAL_PATH=/models/bge-small-zh-v1.5
-```
-
-#### 方案 5：完全离线部署（断网环境）
-
-1. 在有网的机器上提前拉好镜像并保存：
-```bash
-docker compose build
-docker save zhihu-yinban:latest ollama/ollama:latest | gzip > yinban-images.tar.gz
-```
-
-2. 把 `.tar.gz` 和项目目录拷贝到目标机器，加载镜像：
-```bash
-docker load < yinban-images.tar.gz
-docker compose up -d
-```
-
-3. Ollama 模型也可以离线导入（详见下方"本地大模型配置 · 方式 B"）。
-
-#### 网络问题排查清单
-
-| 错误信息 | 原因 | 解决 |
-|---|---|---|
-| `HTTP2 framing layer` / `EOF` | Docker Hub / GitHub 被墙或不稳 | 用方案 3 加镜像，或 VPN |
-| `502 Bad Gateway` (apt-get) | Debian 源被 GFW 干扰 | setup.sh 选"国内加速"，或手动 `--build-arg APT_MIRROR=...` |
-| `auth.docker.io EOF` | Docker Hub 认证被阻断 | Docker Desktop 设镜像源 / 用代理 |
-| `Connection refused` (huggingface.co) | HF 被墙 | 设置 `HF_ENDPOINT=https://hf-mirror.com` |
-| `Permission denied: '/app/.cache'` | 容器内缓存目录权限问题 | 已在最新 Dockerfile 中修复，请 `git pull` 更新 |
-| 模型加载失败但服务启动 | 降级模式（RAG 不可用） | 检查 `/health` 接口中 `rag_available` 字段 |
-
-#### 代理环境自动检测
-
-如果你配置了 `HTTP_PROXY` / `HTTPS_PROXY` 环境变量，`setup.sh` 会自动检测并提示。Docker BuildKit 会自动继承宿主机代理设置用于构建阶段。
-
-```bash
-# 如果你有代理（例如 Clash / v2ray）
-export HTTP_PROXY=http://127.0.0.1:7890
-export HTTPS_PROXY=http://127.0.0.1:7890
-./scripts/setup.sh
-```
+> **Docker Hub 慢？** 在 Docker Desktop 设置或 `/etc/docker/daemon.json` 加 `{"registry-mirrors":["https://docker.mirrors.ustc.edu.cn"]}`，重启 Docker 后重跑。
 
 ---
 
