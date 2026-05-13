@@ -24,18 +24,34 @@
 # 注意：
 #   - Ollama 通常跑在容器外。容器内访问宿主 Ollama 需要 host.docker.internal
 #   - 生产环境请绑定内网地址，不要直接暴露 8000 端口到公网
+#
+# 跨架构支持：
+#   本 Dockerfile 同时支持 linux/amd64 和 linux/arm64（M1/M2 Mac）。
+#   通过 dpkg-architecture 自动探测多架构库路径，不再写死 x86_64。
 # ============================================================
 
 # ── Stage 1: builder ────────────────────────────────────────
-FROM python:3.11-slim AS builder
+FROM python:3.11-slim-bookworm AS builder
 
 WORKDIR /build
 
-# 系统依赖（Tesseract OCR + 中文语言包；如不需要 OCR 可删去）
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# 构建参数：允许指定 APT 镜像源以加速中国大陆/校园网环境
+ARG APT_MIRROR=""
+
+# 切换 APT 镜像源（如果传入 APT_MIRROR）
+RUN if [ -n "$APT_MIRROR" ]; then \
+        sed -i "s|http://deb.debian.org|${APT_MIRROR}|g" /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
+        sed -i "s|http://deb.debian.org|${APT_MIRROR}|g" /etc/apt/sources.list 2>/dev/null || true; \
+    fi
+
+# 系统依赖（Tesseract OCR + 中文语言包）
+# 添加 Acquire::Retries 防止网络抖动
+RUN apt-get -o Acquire::Retries=5 update \
+    && apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
         tesseract-ocr \
         tesseract-ocr-chi-sim \
         libgomp1 \
+        dpkg-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # 先复制 requirements，利用 Docker 层缓存——代码改动不会触发重新安装依赖
@@ -44,37 +60,68 @@ RUN pip install --no-cache-dir --upgrade pip \
  && pip install --no-cache-dir -r requirements.txt
 
 # ── Stage 2: runtime ────────────────────────────────────────
-FROM python:3.11-slim AS runtime
+FROM python:3.11-slim-bookworm AS runtime
 
 WORKDIR /app
+
+# 构建参数：允许指定 APT 镜像源
+ARG APT_MIRROR=""
+
+# 切换 APT 镜像源（如果传入 APT_MIRROR）
+RUN if [ -n "$APT_MIRROR" ]; then \
+        sed -i "s|http://deb.debian.org|${APT_MIRROR}|g" /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
+        sed -i "s|http://deb.debian.org|${APT_MIRROR}|g" /etc/apt/sources.list 2>/dev/null || true; \
+    fi
 
 # 从 builder 复制已安装的 site-packages + 可执行文件
 COPY --from=builder /usr/local/lib/python3.11 /usr/local/lib/python3.11
 COPY --from=builder /usr/local/bin /usr/local/bin
+
 # Tesseract 二进制 + 语言包
 COPY --from=builder /usr/bin/tesseract /usr/bin/tesseract
 COPY --from=builder /usr/share/tesseract-ocr /usr/share/tesseract-ocr
-COPY --from=builder /usr/lib/x86_64-linux-gnu/libtesseract* \
-                    /usr/lib/x86_64-linux-gnu/
-COPY --from=builder /usr/lib/x86_64-linux-gnu/libleptonica* \
-                    /usr/lib/x86_64-linux-gnu/
 
-# 运行时依赖（libgomp for sentence-transformers）
-RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 \
+# ── 跨架构动态库复制 ──────────────────────────────────────────
+# 使用 dpkg-architecture 探测实际架构多架构路径（x86_64-linux-gnu 或 aarch64-linux-gnu）
+# 这样无论在 Intel 还是 ARM 机器上都能正确构建。
+COPY --from=builder /usr/bin/dpkg-architecture /usr/bin/dpkg-architecture
+RUN MULTIARCH=$(dpkg-architecture -qDEB_HOST_MULTIARCH 2>/dev/null || echo "x86_64-linux-gnu") && \
+    echo "Detected multiarch: ${MULTIARCH}"
+# 直接安装运行时依赖而非手动复制 .so，更稳定且跨架构兼容
+RUN apt-get -o Acquire::Retries=5 update \
+    && apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
+        libtesseract5 \
+        libleptonica-dev \
+        libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 # 非 root 用户运行
-RUN groupadd -r yinban && useradd -r -g yinban -d /app yinban
+RUN groupadd -r yinban && useradd -r -g yinban -d /app -s /bin/false yinban
 
 # 复制应用代码
 COPY --chown=yinban:yinban . .
 
-# 数据目录（挂载卷）
-# 注意：容器以非 root yinban 用户运行，所有挂载点必须在切换用户前创建并 chown，
-#      否则 docker volume 首次挂载会以 root:root 出现，yinban 写不进去导致启动失败。
-RUN mkdir -p local_ehr_db local_ehr_uploads local_nursing_events local_auth local_audit_log \
+# 数据目录（挂载卷）+ HuggingFace/模型缓存目录
+# 注意：容器以非 root yinban 用户运行，所有挂载点和缓存目录必须
+#       在切换用户前创建并 chown，否则会出 Permission Denied。
+RUN mkdir -p \
+        local_ehr_db \
+        local_ehr_uploads \
+        local_nursing_events \
+        local_auth \
+        local_audit_log \
+        /app/.cache/huggingface \
+        /app/.cache/torch \
+        /app/.cache/chroma \
+        /tmp/sentence_transformers \
     && chown -R yinban:yinban \
-        local_ehr_db local_ehr_uploads local_nursing_events local_auth local_audit_log
+        local_ehr_db \
+        local_ehr_uploads \
+        local_nursing_events \
+        local_auth \
+        local_audit_log \
+        /app/.cache \
+        /tmp/sentence_transformers
 
 USER yinban
 
@@ -88,7 +135,16 @@ ENV HOST=0.0.0.0 \
     OLLAMA_API_URL=http://host.docker.internal:11434/api/generate \
     OLLAMA_MODEL_NAME=hf.co/mradermacher/HuatuoGPT-o1-7B-GGUF:Q4_K_M \
     PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1
+    PYTHONDONTWRITEBYTECODE=1 \
+    # ── HuggingFace / Transformers 缓存目录 ──
+    # 确保模型下载写入 yinban 用户可写的目录
+    HF_HOME=/app/.cache/huggingface \
+    HF_HUB_CACHE=/app/.cache/huggingface/hub \
+    TRANSFORMERS_CACHE=/app/.cache/huggingface/transformers \
+    SENTENCE_TRANSFORMERS_HOME=/tmp/sentence_transformers \
+    XDG_CACHE_HOME=/app/.cache \
+    # ── ChromaDB telemetry ──
+    ANONYMIZED_TELEMETRY=False
 
 EXPOSE 8000
 

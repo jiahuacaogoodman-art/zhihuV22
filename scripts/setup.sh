@@ -38,6 +38,17 @@ error()   { echo -e "${RED}✘${NC}  $*"; }
 header()  { echo -e "\n${BOLD}${CYAN}━━━ $* ━━━${NC}\n"; }
 ask()     { echo -en "${BOLD}$*${NC}"; }
 
+# 密钥脱敏显示：只展示前4位 + "****" + 末4位
+mask_secret() {
+    local secret="$1"
+    local len=${#secret}
+    if [ "$len" -le 8 ]; then
+        echo "****"
+    else
+        echo "${secret:0:4}****${secret: -4}"
+    fi
+}
+
 # 项目根目录（脚本所在位置的上一级）
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -56,6 +67,20 @@ echo "  ║       ZhiHu YinBan Deployment Wizard            ║"
 echo "  ╚══════════════════════════════════════════════════╝"
 echo -e "${NC}"
 echo ""
+
+# ══════════════════════════════════════════════════════════════
+# Step 0: 代理 / 网络环境检测
+# ══════════════════════════════════════════════════════════════
+# 自动检测代理环境变量，帮助用户诊断网络问题
+if [ -n "${HTTP_PROXY:-}" ] || [ -n "${HTTPS_PROXY:-}" ] || [ -n "${http_proxy:-}" ] || [ -n "${https_proxy:-}" ]; then
+    info "检测到代理环境变量:"
+    [ -n "${HTTP_PROXY:-}" ]  && echo -e "    HTTP_PROXY  = ${CYAN}${HTTP_PROXY}${NC}"
+    [ -n "${HTTPS_PROXY:-}" ] && echo -e "    HTTPS_PROXY = ${CYAN}${HTTPS_PROXY}${NC}"
+    [ -n "${http_proxy:-}" ]  && echo -e "    http_proxy  = ${CYAN}${http_proxy}${NC}"
+    [ -n "${https_proxy:-}" ] && echo -e "    https_proxy = ${CYAN}${https_proxy}${NC}"
+    echo ""
+    info "Docker 构建时会自动继承宿主机代理（BuildKit / Docker Desktop）"
+fi
 
 # ══════════════════════════════════════════════════════════════
 # Step 1: 检测 Docker
@@ -404,17 +429,21 @@ EOF
 success "配置已写入: ${CYAN}${ENV_FILE}${NC}"
 echo ""
 echo "  生成的关键配置："
-echo -e "    AUTH_TOKEN         = ${YELLOW}${AUTH_TOKEN}${NC}"
-echo -e "    PII_ENCRYPTION_KEY = ${YELLOW}${PII_ENCRYPTION_KEY}${NC}"
+echo -e "    AUTH_TOKEN         = ${YELLOW}$(mask_secret "$AUTH_TOKEN")${NC}"
+echo -e "    PII_ENCRYPTION_KEY = ${YELLOW}$(mask_secret "$PII_ENCRYPTION_KEY")${NC}"
 echo -e "    LLM Provider       = ${CYAN}${LLM_PROVIDER}${NC}"
 if [[ "$LLM_PROVIDER" == "ollama" ]]; then
     echo -e "    模型               = ${CYAN}${OLLAMA_MODEL_NAME}${NC}"
 else
     echo -e "    API Base           = ${CYAN}${OPENAI_API_BASE}${NC}"
     echo -e "    模型               = ${CYAN}${OPENAI_MODEL}${NC}"
+    if [ -n "$OPENAI_API_KEY" ]; then
+        echo -e "    API Key            = ${YELLOW}$(mask_secret "$OPENAI_API_KEY")${NC}"
+    fi
 fi
 echo ""
-echo -e "  ${BLUE}ℹ${NC}  随时可通过 ${CYAN}cat ${ENV_FILE}${NC} 查看完整配置"
+echo -e "  ${BLUE}ℹ${NC}  完整密钥保存在 ${CYAN}${ENV_FILE}${NC}，请妥善保管该文件"
+echo -e "  ${RED}⚠ 请勿截图/录屏时暴露 .env 文件内容${NC}"
 
 # ══════════════════════════════════════════════════════════════
 # Step 6: 启动 Docker Compose
@@ -438,6 +467,8 @@ echo ""
 # 构建 compose 命令
 COMPOSE_FILES="-f docker-compose.yml"
 COMPOSE_PROFILES=""
+BUILD_ARGS=""
+
 if [[ "$HAS_GPU" == "true" ]]; then
     COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.gpu.yml"
     info "启用 GPU overlay"
@@ -449,7 +480,34 @@ else
     info "使用远程 API，跳过 Ollama 容器（节省 ~5 GB 磁盘 + 内存）"
 fi
 
-COMPOSE_UP_CMD="$COMPOSE_CMD $COMPOSE_FILES $COMPOSE_PROFILES up -d"
+# 网络优化：中国大陆/校园网环境可使用镜像加速
+echo ""
+echo -e "  ${BOLD}构建选项（网络优化）：${NC}"
+echo ""
+echo -e "    ${BOLD}[1] 默认（直接构建，适合海外/科学上网）${NC}"
+echo -e "    ${BOLD}[2] 国内加速（使用清华 APT 镜像 + 不强制 pull 基础镜像）${NC}"
+echo -e "    ${BOLD}[3] 离线/缓存优先（不拉取任何远程资源，仅用本地缓存）${NC}"
+echo ""
+ask "  选择 [1-3] (默认 1): "
+read -r network_choice
+echo ""
+
+DOCKER_BUILD_EXTRA=""
+case "${network_choice:-1}" in
+    2)
+        DOCKER_BUILD_EXTRA="--build-arg APT_MIRROR=https://mirrors.tuna.tsinghua.edu.cn"
+        info "使用清华 APT 镜像加速 Debian 包下载"
+        ;;
+    3)
+        DOCKER_BUILD_EXTRA="--no-pull"
+        info "离线模式：跳过基础镜像拉取，仅使用本地缓存"
+        ;;
+    *)
+        info "使用默认网络设置"
+        ;;
+esac
+
+COMPOSE_UP_CMD="$COMPOSE_CMD $COMPOSE_FILES $COMPOSE_PROFILES up -d --build $DOCKER_BUILD_EXTRA"
 info "正在启动服务..."
 echo ""
 echo -e "  ${BOLD}$ ${COMPOSE_UP_CMD}${NC}"
@@ -538,10 +596,12 @@ echo -e "    护工端：  ${CYAN}http://localhost:8000/nurse${NC}"
 echo -e "    健康检查：${CYAN}http://localhost:8000/health${NC}"
 echo ""
 echo -e "  ${BOLD}管理员 Token（请妥善保管）：${NC}"
-echo -e "    ${YELLOW}${AUTH_TOKEN}${NC}"
+echo -e "    ${YELLOW}$(mask_secret "$AUTH_TOKEN")${NC}"
+echo -e "    完整值请查看: ${CYAN}grep AUTH_TOKEN ${ENV_FILE}${NC}"
 echo ""
 echo -e "  ${BOLD}PII 加密密钥（备份用，丢失将无法解密已有数据）：${NC}"
-echo -e "    ${YELLOW}${PII_ENCRYPTION_KEY}${NC}"
+echo -e "    ${YELLOW}$(mask_secret "$PII_ENCRYPTION_KEY")${NC}"
+echo -e "    完整值请查看: ${CYAN}grep PII_ENCRYPTION_KEY ${ENV_FILE}${NC}"
 echo ""
 echo -e "  ${BOLD}使用方法：${NC}"
 echo "    1. 打开浏览器访问 http://localhost:8000/"

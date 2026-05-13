@@ -113,6 +113,18 @@ services:
       OPENAI_API_BASE: ${OPENAI_API_BASE:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      # ─ HuggingFace / Embedding 缓存 ─
+      # 确保模型下载到容器内可写目录，避免 Permission Denied
+      HF_HOME: /app/.cache/huggingface
+      HF_HUB_CACHE: /app/.cache/huggingface/hub
+      TRANSFORMERS_CACHE: /app/.cache/huggingface/transformers
+      SENTENCE_TRANSFORMERS_HOME: /tmp/sentence_transformers
+      XDG_CACHE_HOME: /app/.cache
+      # ─ Embedding 降级模式 ─
+      EMBEDDING_ALLOW_DEGRADED: ${EMBEDDING_ALLOW_DEGRADED:-true}
+      EMBEDDING_MODEL_LOCAL_PATH: ${EMBEDDING_MODEL_LOCAL_PATH:-}
+      # ─ ChromaDB telemetry 关闭 ─
+      ANONYMIZED_TELEMETRY: "False"
       # ─ 其它 ─
       MAX_UPLOAD_SIZE_MB: ${MAX_UPLOAD_SIZE_MB:-15}
       WORKERS: ${WORKERS:-1}
