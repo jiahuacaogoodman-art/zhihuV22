@@ -63,9 +63,72 @@ echo ""
 header "Step 1/6 · 检测 Docker 环境"
 
 if ! command -v docker &>/dev/null; then
-    error "未检测到 Docker。请先安装 Docker："
-    echo "  https://docs.docker.com/engine/install/"
-    exit 1
+    error "未检测到 Docker。"
+    echo ""
+    # 检测平台给出具体安装命令
+    case "$(uname -s)" in
+        Darwin)
+            echo -e "  ${BOLD}macOS 安装方式（任选一种）：${NC}"
+            echo ""
+            echo "    方式 1（推荐，需先装 Homebrew）："
+            echo -e "      ${CYAN}brew install --cask docker${NC}"
+            echo "      安装后在启动台打开 Docker 图标，等顶栏出现鲸鱼即可"
+            echo ""
+            echo "    方式 2（手动下载）："
+            if [[ "$(uname -m)" == "arm64" ]]; then
+                echo -e "      ${CYAN}https://desktop.docker.com/mac/main/arm64/Docker.dmg${NC}"
+            else
+                echo -e "      ${CYAN}https://desktop.docker.com/mac/main/amd64/Docker.dmg${NC}"
+            fi
+            echo "      下载 → 拖进 Applications → 双击打开 → 等启动完成"
+            ;;
+        Linux)
+            echo -e "  ${BOLD}Linux 一键安装：${NC}"
+            echo ""
+            echo -e "    ${CYAN}curl -fsSL https://get.docker.com | sudo sh${NC}"
+            echo -e "    ${CYAN}sudo usermod -aG docker \$USER${NC}"
+            echo ""
+            echo "    安装后重新登录（或 newgrp docker），再重跑本脚本。"
+            ;;
+        *)
+            echo "  请访问 https://docs.docker.com/engine/install/ 按平台安装"
+            ;;
+    esac
+    echo ""
+    ask "  是否现在自动尝试安装 Docker? [y/N]: "
+    read -r auto_install_docker
+    if [[ "$auto_install_docker" =~ ^[Yy] ]]; then
+        case "$(uname -s)" in
+            Darwin)
+                if command -v brew &>/dev/null; then
+                    info "正在通过 Homebrew 安装 Docker Desktop..."
+                    brew install --cask docker
+                    echo ""
+                    warn "请在启动台打开 Docker 应用，等顶栏出现鲸鱼图标后重跑本脚本。"
+                    exit 0
+                else
+                    error "未检测到 Homebrew，请手动安装 Docker Desktop："
+                    echo "  https://docs.docker.com/desktop/install/mac-install/"
+                    exit 1
+                fi
+                ;;
+            Linux)
+                info "正在安装 Docker..."
+                curl -fsSL https://get.docker.com | sudo sh
+                sudo usermod -aG docker "$USER"
+                echo ""
+                warn "Docker 已安装。请重新登录终端（或运行 newgrp docker），然后重跑本脚本。"
+                exit 0
+                ;;
+            *)
+                error "不支持自动安装，请手动安装后重跑本脚本。"
+                exit 1
+                ;;
+        esac
+    else
+        info "安装完 Docker 后重跑本脚本即可。"
+        exit 0
+    fi
 fi
 success "Docker 已安装: $(docker --version | head -1)"
 
