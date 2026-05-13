@@ -401,18 +401,20 @@ WORKERS=1
 RELOAD=0
 EOF
 
-success "配置已写入: $ENV_FILE"
+success "配置已写入: ${CYAN}${ENV_FILE}${NC}"
 echo ""
 echo "  生成的关键配置："
-echo -e "    AUTH_TOKEN     = ${YELLOW}${AUTH_TOKEN:0:16}...${NC}"
-echo -e "    PII 加密       = ${GREEN}已启用${NC}"
-echo -e "    LLM Provider   = ${CYAN}${LLM_PROVIDER}${NC}"
+echo -e "    AUTH_TOKEN         = ${YELLOW}${AUTH_TOKEN}${NC}"
+echo -e "    PII_ENCRYPTION_KEY = ${YELLOW}${PII_ENCRYPTION_KEY}${NC}"
+echo -e "    LLM Provider       = ${CYAN}${LLM_PROVIDER}${NC}"
 if [[ "$LLM_PROVIDER" == "ollama" ]]; then
-    echo -e "    模型           = ${CYAN}${OLLAMA_MODEL_NAME}${NC}"
+    echo -e "    模型               = ${CYAN}${OLLAMA_MODEL_NAME}${NC}"
 else
-    echo -e "    API Base       = ${CYAN}${OPENAI_API_BASE}${NC}"
-    echo -e "    模型           = ${CYAN}${OPENAI_MODEL}${NC}"
+    echo -e "    API Base           = ${CYAN}${OPENAI_API_BASE}${NC}"
+    echo -e "    模型               = ${CYAN}${OPENAI_MODEL}${NC}"
 fi
+echo ""
+echo -e "  ${BLUE}ℹ${NC}  随时可通过 ${CYAN}cat ${ENV_FILE}${NC} 查看完整配置"
 
 # ══════════════════════════════════════════════════════════════
 # Step 6: 启动 Docker Compose
@@ -423,25 +425,37 @@ echo ""
 ask "  确认启动部署? [Y/n]: "
 read -r confirm
 if [[ "$confirm" =~ ^[Nn] ]]; then
-    info "已取消。配置文件已保存在 .env，你可以稍后手动运行："
-    echo "    $COMPOSE_CMD up -d"
+    info "已取消。配置文件已保存，你可以稍后手动运行："
+    echo ""
+    echo -e "    ${CYAN}$COMPOSE_CMD up -d${NC}"
+    echo ""
+    echo -e "  密钥已保存在 ${CYAN}${ENV_FILE}${NC}，查看完整配置："
+    echo -e "    ${CYAN}cat ${ENV_FILE}${NC}"
     exit 0
 fi
 echo ""
 
 # 构建 compose 命令
 COMPOSE_FILES="-f docker-compose.yml"
+COMPOSE_PROFILES=""
 if [[ "$HAS_GPU" == "true" ]]; then
     COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.gpu.yml"
     info "启用 GPU overlay"
 fi
+if [[ "$LLM_PROVIDER" == "ollama" ]]; then
+    COMPOSE_PROFILES="--profile ollama"
+    info "启用本地 Ollama（首次需下载模型，约 5-20 分钟）"
+else
+    info "使用远程 API，跳过 Ollama 容器（节省 ~5 GB 磁盘 + 内存）"
+fi
 
-info "正在启动服务（首次需要构建镜像 + 下载模型，请耐心等待）..."
+COMPOSE_UP_CMD="$COMPOSE_CMD $COMPOSE_FILES $COMPOSE_PROFILES up -d"
+info "正在启动服务..."
 echo ""
-echo -e "  ${BOLD}$ $COMPOSE_CMD $COMPOSE_FILES up -d${NC}"
+echo -e "  ${BOLD}$ ${COMPOSE_UP_CMD}${NC}"
 echo ""
 
-$COMPOSE_CMD $COMPOSE_FILES up -d 2>&1 | sed 's/^/  /'
+$COMPOSE_UP_CMD 2>&1 | sed 's/^/  /'
 
 echo ""
 success "容器已启动"
@@ -526,6 +540,9 @@ echo ""
 echo -e "  ${BOLD}管理员 Token（请妥善保管）：${NC}"
 echo -e "    ${YELLOW}${AUTH_TOKEN}${NC}"
 echo ""
+echo -e "  ${BOLD}PII 加密密钥（备份用，丢失将无法解密已有数据）：${NC}"
+echo -e "    ${YELLOW}${PII_ENCRYPTION_KEY}${NC}"
+echo ""
 echo -e "  ${BOLD}使用方法：${NC}"
 echo "    1. 打开浏览器访问 http://localhost:8000/"
 echo "    2. 在左侧栏 Token 输入框粘贴上面的 Token"
@@ -547,6 +564,10 @@ echo -e "  ${BOLD}数据安全：${NC}"
 echo "    ✅ 所有数据保存在 Docker Volume 中，不出本机"
 echo "    ✅ PII 字段已 Fernet 加密"
 echo "    ✅ 操作审计已开启"
+echo ""
+echo -e "  ${BOLD}配置文件：${NC}"
+echo -e "    ${CYAN}${ENV_FILE}${NC}"
+echo "    包含所有密钥和配置，可用 cat .env 查看"
 echo ""
 echo "  ────────────────────────────────────────────────"
 echo -e "  如果这个项目帮到了你，请给个 ⭐"
