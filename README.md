@@ -785,6 +785,7 @@ AI 生成的护理建议**仅供护理参考，不替代医生诊断，不构成
 - ✅ 允许：个人学习 / 研究、教学、公益、非营利医疗机构与养老机构内部使用
 - ❌ 不允许：将本项目用于任何商业用途
 - 📮 **商业授权合作**请联系：[@jiahuacaogoodman-art](https://github.com/jiahuacaogoodman-art)
+- 🏥 **民营养老机构**如有商业合作意向，可联系获取正式版：**jiahuacaogoodman@gmail.com**
 
 Copyright (c) 2026 [jiahuaCao](https://github.com/jiahuacaogoodman-art)
 
