@@ -97,6 +97,52 @@ chmod +x scripts/setup.sh && ./scripts/setup.sh
 
 ---
 
+### 🇨🇳 国内网络部署（无梯子直接跑）
+
+没有代理？用这个脚本，自动走国内镜像，不碰任何被墙地址：
+
+```bash
+git clone https://github.com/jiahuacaogoodman-art/Zhihu-Yinban.git
+cd Zhihu-Yinban
+chmod +x scripts/setup-cn.sh && ./scripts/setup-cn.sh
+```
+
+它跟标准 `setup.sh` 的区别：
+
+| 项目 | setup.sh | setup-cn.sh |
+|---|---|---|
+| APT 包下载 | 默认 Debian 官方源 | 清华镜像 |
+| HuggingFace 模型 | 直连 huggingface.co | hf-mirror.com |
+| Docker Hub | 直连 | 提示配置国内镜像 |
+| 交互问答 | 6 步向导 | 零交互，全自动 |
+
+> 如果 `docker pull ollama/ollama` 也很慢，在 Docker Desktop 设置 → Docker Engine 里加：
+> ```json
+> {"registry-mirrors": ["https://docker.mirrors.ustc.edu.cn"]}
+> ```
+> 然后 Apply & Restart，再重跑脚本即可。
+
+<details>
+<summary>完全断网（离线）部署</summary>
+
+在有网机器上打包：
+```bash
+docker compose build --build-arg APT_MIRROR=https://mirrors.tuna.tsinghua.edu.cn
+docker save zhihu-yinban:latest ollama/ollama:latest | gzip > yinban-images.tar.gz
+```
+
+拷到目标机器后：
+```bash
+docker load < yinban-images.tar.gz
+cp .env.example .env   # 编辑填入 AUTH_TOKEN 和 PII_ENCRYPTION_KEY
+docker compose --profile ollama up -d
+```
+
+Ollama 模型离线导入见下方「本地大模型配置 · 方式 B」。
+</details>
+
+---
+
 ### 手动安装（开发者 / 不用 Docker）
 
 <details>
