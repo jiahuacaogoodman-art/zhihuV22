@@ -592,9 +592,34 @@ curl "http://localhost:8000/api/ehr/audit?patient_id=p001&limit=20" \
 
 ## 🏭 生产部署
 
-### 方式 A：Docker Compose 一键部署（推荐 ⭐）
+### 方式 0：一键部署向导（最推荐 ⭐⭐⭐）
 
-最快的方式 —— 一行命令拉起 **ollama + 模型自动下载 + 后端 + 前端**：
+什么都不用手动配 —— 脚本自动检测环境、生成密钥、选模型、拉起 Docker：
+
+```bash
+git clone https://github.com/jiahuacaogoodman-art/Zhihu-Yinban.git
+cd Zhihu-Yinban
+chmod +x scripts/setup.sh
+./scripts/setup.sh
+```
+
+向导会依次：
+1. 检测 Docker / Docker Compose / NVIDIA GPU
+2. 自动生成 AUTH_TOKEN + PII_ENCRYPTION_KEY（或让你粘贴已有的）
+3. 让你选 LLM 后端：本地 Ollama 或远程 GPU API
+4. 让你选模型量化档位（Q3/Q4/Q5/Q8/自定义）
+5. 写入 `.env`
+6. `docker compose up -d`
+7. 等模型下载 + 等后端 healthy
+8. **弹出访问地址 + 管理员 Token**
+
+全程按回车就行，约 10 分钟搞定（首次下载模型取决于网速）。
+
+---
+
+### 方式 A：Docker Compose 手动部署（不想跑脚本时）
+
+跟 setup.sh 做的事一样，但手动执行每一步：
 
 ```bash
 # 1. 准备环境变量
