@@ -435,9 +435,34 @@ All endpoints live under `/api/*` and are protected by **token-based authenticat
 
 ## 🏭 Production deployment
 
-### Option A · Docker Compose (recommended ⭐)
+### Option 0 · One-click setup wizard (most recommended ⭐⭐⭐)
 
-One command brings up **Ollama + auto-pulled HuatuoGPT-o1-7B + backend + UI**:
+Zero manual configuration — the script auto-detects everything, generates secrets, picks a model, and launches Docker:
+
+```bash
+git clone https://github.com/jiahuacaogoodman-art/Zhihu-Yinban.git
+cd Zhihu-Yinban
+chmod +x scripts/setup.sh
+./scripts/setup.sh
+```
+
+The wizard will:
+1. Detect Docker / Docker Compose / NVIDIA GPU
+2. Auto-generate AUTH_TOKEN + PII_ENCRYPTION_KEY (or let you paste existing ones)
+3. Ask for LLM backend: local Ollama or remote GPU API
+4. Let you pick model quantization (Q3/Q4/Q5/Q8/custom)
+5. Write `.env`
+6. Run `docker compose up -d`
+7. Wait for model download + app health check
+8. **Print access URL + admin token on success**
+
+Just press Enter through the prompts. Takes ~10 minutes on first run (model download depends on network speed).
+
+---
+
+### Option A · Docker Compose manual setup (if you prefer not to run the script)
+
+Same thing as setup.sh, but you do each step yourself:
 
 ```bash
 # 1. Prepare env file
