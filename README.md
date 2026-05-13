@@ -143,6 +143,33 @@ Ollama 模型离线导入见下方「本地大模型配置 · 方式 B」。
 
 ---
 
+### 🇨🇳 国内网络部署（无梯子直接跑）
+
+没有代理？用这个脚本，自动走国内镜像，不碰任何被墙地址：
+
+```bash
+git clone https://github.com/jiahuacaogoodman-art/Zhihu-Yinban.git
+cd Zhihu-Yinban
+chmod +x scripts/setup-cn.sh && ./scripts/setup-cn.sh
+```
+
+它跟标准 `setup.sh` 的区别：
+
+| 项目 | setup.sh | setup-cn.sh |
+|---|---|---|
+| APT 包下载 | 默认 Debian 官方源 | 清华镜像 |
+| HuggingFace 模型 | 直连 huggingface.co | hf-mirror.com |
+| Docker Hub | 直连 | 提示配置国内镜像 |
+| 交互问答 | 6 步向导 | 零交互，全自动 |
+
+> 如果 `docker pull ollama/ollama` 也很慢，在 Docker Desktop 设置 → Docker Engine 里加：
+> ```json
+> {"registry-mirrors": ["https://docker.mirrors.ustc.edu.cn"]}
+> ```
+> 然后 Apply & Restart，再重跑脚本即可。
+
+---
+
 ### 手动安装（开发者 / 不用 Docker）
 
 <details>
