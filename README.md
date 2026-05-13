@@ -101,6 +101,14 @@ chmod +x scripts/setup.sh && ./scripts/setup.sh
 
 > 国内直连 Docker Hub、GitHub、HuggingFace 经常超时或 502，以下方案帮你绕过。
 
+#### 方案 0：国内专用一键脚本（零交互）
+
+```bash
+chmod +x scripts/setup-cn.sh && ./scripts/setup-cn.sh
+```
+
+自动走清华 APT 镜像 + hf-mirror.com，不问问题直接起服务。`.env` 里可自由选 Ollama 或远程 API（DeepSeek/智谱/vLLM）。
+
 #### 方案 1：setup.sh 内置加速（最简单）
 
 运行 `./scripts/setup.sh` 后，在 **Step 6 构建选项** 中选 `[2] 国内加速`，脚本会自动：
