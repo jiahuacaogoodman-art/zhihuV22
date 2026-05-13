@@ -24,9 +24,12 @@
 
 services:
   # ── 本地大模型推理引擎 ─────────────────────────────────
+  # 仅在 LLM_PROVIDER=ollama（默认）时需要启动。
+  # 使用远程 API 时通过 --profile ollama 控制：不传则不启动。
   ollama:
     image: ollama/ollama:latest
     container_name: yinban-ollama
+    profiles: ["ollama"]
     restart: unless-stopped
     # 容器内暴露 11434，对宿主只绑 127.0.0.1（不暴露到公网）。
     # 局域网部署：把 127.0.0.1 改成 0.0.0.0 或宿主机内网 IP。
@@ -55,6 +58,7 @@ services:
   model-puller:
     image: ollama/ollama:latest
     container_name: yinban-model-puller
+    profiles: ["ollama"]
     depends_on:
       ollama:
         condition: service_healthy
@@ -85,12 +89,14 @@ services:
     image: zhihu-yinban:latest
     container_name: yinban-app
     restart: unless-stopped
+    # depends_on 只在 ollama profile 激活时生效（compose 自动忽略未启动的服务依赖）
     depends_on:
       ollama:
         condition: service_healthy
-      # 等模型拉完再起 app；如果你想 app 先起来，把下面这段去掉
+        required: false
       model-puller:
         condition: service_completed_successfully
+        required: false
     ports:
       - "8000:8000"
     environment:
@@ -98,10 +104,15 @@ services:
       # 必填：从根目录 .env 文件读取
       AUTH_TOKEN: "${AUTH_TOKEN:?AUTH_TOKEN is required, generate with openssl rand -hex 32}"
       PII_ENCRYPTION_KEY: "${PII_ENCRYPTION_KEY:?PII_ENCRYPTION_KEY is required, generate with cryptography.fernet.Fernet.generate_key()}"
-      # ─ Ollama 连接 ─
-      # compose 内部 DNS 解析，无需 host.docker.internal
-      OLLAMA_API_URL: http://ollama:11434/api/generate
+      # ─ LLM Provider ─
+      LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
+      # ─ Ollama 连接（LLM_PROVIDER=ollama 时使用）─
+      OLLAMA_API_URL: ${OLLAMA_API_URL:-http://ollama:11434/api/generate}
       OLLAMA_MODEL_NAME: ${OLLAMA_MODEL_NAME:-hf.co/mradermacher/HuatuoGPT-o1-7B-GGUF:Q4_K_M}
+      # ─ OpenAI 兼容（LLM_PROVIDER=openai 时使用）─
+      OPENAI_API_BASE: ${OPENAI_API_BASE:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       # ─ 其它 ─
       MAX_UPLOAD_SIZE_MB: ${MAX_UPLOAD_SIZE_MB:-15}
       WORKERS: ${WORKERS:-1}
