@@ -483,3 +483,7 @@ echo "  ────────────────────────
 echo -e "  如果这个项目帮到了你，请给个 ⭐"
 echo -e "  ${CYAN}https://github.com/jiahuacaogoodman-art/Zhihu-Yinban${NC}"
 echo ""
+echo -e "  ${BOLD}📮 商业合作：${NC}"
+echo "    民营养老机构如有商业合作意向，可联系获取正式版："
+echo -e "    ${CYAN}jiahuacaogoodman@gmail.com${NC}"
+echo ""
