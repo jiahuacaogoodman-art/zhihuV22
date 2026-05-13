@@ -77,7 +77,32 @@
 
 ## 🚀 快速开始
 
-### 环境要求
+### 一键部署（推荐，3 行搞定）
+
+只需要装了 Docker，其余全自动——密钥生成、模型下载、GPU 检测、服务启动：
+
+```bash
+git clone https://github.com/jiahuacaogoodman-art/Zhihu-Yinban.git
+cd Zhihu-Yinban
+chmod +x scripts/setup.sh && ./scripts/setup.sh
+```
+
+跟着向导按回车，约 10 分钟后看到 `🎉 部署成功！` + 管理员 Token，打开浏览器即可使用。
+
+| 页面 | 地址 |
+|---|---|
+| 管理端 | http://localhost:8000/ |
+| 护工端 | http://localhost:8000/nurse |
+| 健康检查 | http://localhost:8000/health |
+
+---
+
+### 手动安装（开发者 / 不用 Docker）
+
+<details>
+<summary>展开手动安装步骤</summary>
+
+#### 环境要求
 
 | 项 | 最低 | 推荐 |
 |---|---|---|
@@ -86,7 +111,7 @@
 | 内存 | 16 GB | 32 GB |
 | GPU | 不需要 | 可选，NVIDIA >= 8GB 显存时更流畅 |
 
-### 安装与启动
+#### 步骤
 
 ```bash
 # 1. 克隆
@@ -114,15 +139,9 @@ cp .env.example .env
 uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
-启动后访问：
-
-| 页面 | 地址 |
-|---|---|
-| 管理端 | http://localhost:8000/ |
-| 护工端 | http://localhost:8000/nurse |
-| 健康检查 | http://localhost:8000/health |
-
 > 首次启动会下载 `bge-small-zh-v1.5`（约 100MB）到 `~/.cache/torch/sentence_transformers/`，下载一次后即可完全断网运行。
+
+</details>
 
 ---
 

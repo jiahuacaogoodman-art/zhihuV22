@@ -109,7 +109,32 @@ Small, local nursing homes share the same three pains:
 
 ## 🚀 Quick start
 
-### Requirements
+### One-click deploy (recommended — 3 lines)
+
+Just need Docker installed. Everything else is automatic — secrets, model download, GPU detection, service startup:
+
+```bash
+git clone https://github.com/jiahuacaogoodman-art/Zhihu-Yinban.git
+cd Zhihu-Yinban
+chmod +x scripts/setup.sh && ./scripts/setup.sh
+```
+
+Follow the wizard prompts (press Enter for defaults). In ~10 minutes you'll see `🎉 Deploy successful!` with your admin token.
+
+| Page | URL |
+|---|---|
+| Admin UI | http://localhost:8000/ |
+| Caregiver UI | http://localhost:8000/nurse |
+| Health check | http://localhost:8000/health |
+
+---
+
+### Manual install (developers / no Docker)
+
+<details>
+<summary>Expand manual install steps</summary>
+
+#### Requirements
 
 | Item | Minimum | Recommended |
 |---|---|---|
@@ -118,7 +143,7 @@ Small, local nursing homes share the same three pains:
 | RAM | 16 GB | 32 GB |
 | GPU | not required | optional, NVIDIA ≥ 8 GB VRAM for better latency |
 
-### Three steps
+#### Steps
 
 ```bash
 # 1. Clone & install
@@ -147,18 +172,10 @@ cp .env.example .env
 uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
-> Prefer the all-in-one stack? Skip steps 2-4 and jump to
-> [Production deployment → Docker Compose](#option-a--docker-compose-recommended-) —
-> it pulls the model from HuggingFace automatically.
-
-Open:
-
-- Admin UI: <http://localhost:8000/>
-- Caregiver UI: <http://localhost:8000/nurse>
-- Health check: <http://localhost:8000/health>
-
 > The first launch downloads `bge-small-zh-v1.5` (~100 MB) into `~/.cache/torch/sentence_transformers/`.
 > **After that, the whole machine can run fully offline.**
+
+</details>
 
 ---
 
