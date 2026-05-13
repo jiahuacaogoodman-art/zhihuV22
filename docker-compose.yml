@@ -1,0 +1,132 @@
+# ============================================================
+# 智护银伴 · Docker Compose 一键部署
+# ZhiHu YinBan · One-shot Docker Compose stack
+#
+# 服务编排 / Services:
+#   - ollama          : 本地大模型推理引擎（Ollama）
+#   - model-puller    : 一次性容器，启动时自动从 HuggingFace 拉 HuatuoGPT-o1-7B GGUF
+#                       Pulls HuatuoGPT-o1-7B GGUF from HuggingFace on first run.
+#   - app             : 智护银伴 后端 + 前端
+#
+# 快速开始 / Quick start:
+#   1) cp .env.example .env
+#   2) 编辑 .env，至少把 AUTH_TOKEN 和 PII_ENCRYPTION_KEY 填上：
+#        AUTH_TOKEN=$(openssl rand -hex 32)
+#        PII_ENCRYPTION_KEY=$(python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+#   3) docker compose up -d
+#      首次启动 model-puller 会从 HuggingFace 下载约 4.8 GB（Q4_K_M 量化），耐心等待。
+#      First run downloads ~4.8 GB from HuggingFace; please be patient.
+#   4) 访问 http://localhost:8000  (admin token = $AUTH_TOKEN)
+#
+# GPU 用户额外加 GPU overlay：
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+# ============================================================
+
+services:
+  # ── 本地大模型推理引擎 ─────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: yinban-ollama
+    restart: unless-stopped
+    # 容器内暴露 11434，对宿主只绑 127.0.0.1（不暴露到公网）。
+    # 局域网部署：把 127.0.0.1 改成 0.0.0.0 或宿主机内网 IP。
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      # 持久化模型权重，避免每次 down/up 重新下载
+      - ollama_models:/root/.ollama
+    environment:
+      # 0.0.0.0 让容器内 Ollama 监听所有网卡，app 容器才能访问
+      OLLAMA_HOST: 0.0.0.0
+      # 一次只装一个模型，避免显存爆掉；可按需调整
+      OLLAMA_MAX_LOADED_MODELS: "1"
+      OLLAMA_KEEP_ALIVE: "30m"
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # ── 一次性模型拉取容器 ─────────────────────────────────
+  # 启动时检查指定模型是否已存在于 ollama_models 卷中；
+  # 不存在 → 从 HuggingFace 自动拉取（无需手写 Modelfile）。
+  # 已存在 → 立即退出（exit 0），不会阻塞 app 启动。
+  model-puller:
+    image: ollama/ollama:latest
+    container_name: yinban-model-puller
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+      # 默认 HuatuoGPT-o1-7B Q4_K_M（约 4.8 GB，CPU 也跑得动）。
+      # 改成 :Q5_K_M 提升质量；改成 :Q8_0 接近无损；改成 :Q3_K_M 进一步省内存。
+      # Default = HuatuoGPT-o1-7B Q4_K_M (~4.8 GB). Override with .env.
+      MODEL_TAG: ${OLLAMA_MODEL_NAME:-hf.co/mradermacher/HuatuoGPT-o1-7B-GGUF:Q4_K_M}
+    entrypoint: >
+      /bin/sh -c '
+        echo "[model-puller] target = $$MODEL_TAG";
+        if ollama list | awk "{print \$$1}" | grep -Fxq "$$MODEL_TAG"; then
+          echo "[model-puller] already present, skipping.";
+          exit 0;
+        fi;
+        echo "[model-puller] pulling from HuggingFace, this may take a while...";
+        ollama pull "$$MODEL_TAG";
+        echo "[model-puller] done.";
+      '
+    restart: "no"
+
+  # ── 智护银伴 后端 ─────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: zhihu-yinban:latest
+    container_name: yinban-app
+    restart: unless-stopped
+    depends_on:
+      ollama:
+        condition: service_healthy
+      # 等模型拉完再起 app；如果你想 app 先起来，把下面这段去掉
+      model-puller:
+        condition: service_completed_successfully
+    ports:
+      - "8000:8000"
+    environment:
+      # ─ 鉴权 / 加密 ─
+      # 必填：从根目录 .env 文件读取
+      AUTH_TOKEN: "${AUTH_TOKEN:?AUTH_TOKEN is required, generate with openssl rand -hex 32}"
+      PII_ENCRYPTION_KEY: "${PII_ENCRYPTION_KEY:?PII_ENCRYPTION_KEY is required, generate with cryptography.fernet.Fernet.generate_key()}"
+      # ─ Ollama 连接 ─
+      # compose 内部 DNS 解析，无需 host.docker.internal
+      OLLAMA_API_URL: http://ollama:11434/api/generate
+      OLLAMA_MODEL_NAME: ${OLLAMA_MODEL_NAME:-hf.co/mradermacher/HuatuoGPT-o1-7B-GGUF:Q4_K_M}
+      # ─ 其它 ─
+      MAX_UPLOAD_SIZE_MB: ${MAX_UPLOAD_SIZE_MB:-15}
+      WORKERS: ${WORKERS:-1}
+    volumes:
+      # 关键：所有持久化目录都用命名卷
+      - ehr_db:/app/local_ehr_db                # ChromaDB 向量库
+      - ehr_uploads:/app/local_ehr_uploads      # 病历原图 + OCR
+      - auth_data:/app/local_auth               # 用户 + API Key
+      - audit_log:/app/local_audit_log          # 操作审计
+      - nursing_events:/app/local_nursing_events # 护理事件流
+      # 协议模板挂载为只读：方便外部热编辑后 docker exec 容器内 reload
+      - ./data:/app/data:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health',timeout=5).status==200 else 1)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  # Ollama 模型权重（最大块，HuatuoGPT-o1-7B Q4_K_M 约 4.8 GB）
+  ollama_models:
+  # 智护银伴 业务数据
+  ehr_db:
+  ehr_uploads:
+  auth_data:
+  audit_log:
+  nursing_events:

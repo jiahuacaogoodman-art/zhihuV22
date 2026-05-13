@@ -114,7 +114,7 @@ Small, local nursing homes share the same three pains:
 | Item | Minimum | Recommended |
 |---|---|---|
 | OS | Linux / macOS / Windows | Ubuntu 22.04 LTS |
-| Python | 3.10 | 3.11 |
+| Python | 3.10 | 3.12 |
 | RAM | 16 GB | 32 GB |
 | GPU | not required | optional, NVIDIA ≥ 8 GB VRAM for better latency |
 
@@ -137,9 +137,19 @@ curl -fsSL https://ollama.com/install.sh | sh
 sudo apt install -y tesseract-ocr tesseract-ocr-chi-sim
 pip install rapidocr_onnxruntime   # optional, better Chinese accuracy
 
+# 4. Configure secrets (auth + PII encryption)
+cp .env.example .env
+# Then edit .env and set at least:
+#   AUTH_TOKEN=$(openssl rand -hex 32)
+#   PII_ENCRYPTION_KEY=$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')
+
 # Run
 uvicorn main:app --host 0.0.0.0 --port 8000
 ```
+
+> Prefer the all-in-one stack? Skip steps 2-4 and jump to
+> [Production deployment → Docker Compose](#option-a--docker-compose-recommended-) —
+> it pulls the model from HuggingFace automatically.
 
 Open:
 
@@ -154,46 +164,56 @@ Open:
 
 ## 🤖 Local LLM setup (HuatuoGPT-o1-7B)
 
-The project is wired to **HuatuoGPT-o1-7B** (a Chinese medical LLM, ~8 GB). In the code
-the model is referenced as `huatuo_o1_7b` — this is a **local alias**, not a name
-published on Ollama's official Registry. `ollama pull huatuo_o1_7b` will 404.
-
-Pick one of the three methods below. The goal is the same either way:
-**`ollama list` must show `huatuo_o1_7b:latest`** when you're done.
+The project is wired to **HuatuoGPT-o1-7B** (a Chinese medical LLM, ~5 GB
+quantized). The Docker Compose stack handles model setup automatically — for
+bare-metal installs, pick one of the methods below.
 
 ### Upstream sources
 
 | Source | Link |
 |---|---|
 | 🤗 HuggingFace (original weights) | [FreedomIntelligence/HuatuoGPT-o1-7B](https://huggingface.co/FreedomIntelligence/HuatuoGPT-o1-7B) |
-| 🤗 HuggingFace (GGUF quants) | [bartowski/HuatuoGPT-o1-7B-GGUF](https://huggingface.co/bartowski/HuatuoGPT-o1-7B-GGUF) |
+| 🤗 HuggingFace (GGUF quants — used by Compose) | [mradermacher/HuatuoGPT-o1-7B-GGUF](https://huggingface.co/mradermacher/HuatuoGPT-o1-7B-GGUF) |
+| 🤗 HuggingFace (alt GGUF) | [bartowski/HuatuoGPT-o1-7B-GGUF](https://huggingface.co/bartowski/HuatuoGPT-o1-7B-GGUF) |
 | 📦 Ollama community (pre-packaged) | [cliu/HuatuoGPT-o1-7B](https://ollama.com/cliu/HuatuoGPT-o1-7B) |
 | 📄 GitHub (upstream + paper) | [FreedomIntelligence/HuatuoGPT-o1](https://github.com/FreedomIntelligence/HuatuoGPT-o1) |
 
-### Method A — pull from Ollama community (easiest)
+### Method 0 — Docker Compose (zero-touch, recommended)
+
+The `docker-compose.yml` ships with a `model-puller` service that pulls
+`hf.co/mradermacher/HuatuoGPT-o1-7B-GGUF:Q4_K_M` directly from HuggingFace on
+first start. Nothing else to do — just `docker compose up -d`. See
+[Production deployment → Option A](#option-a--docker-compose-recommended-).
+
+### Method A — pull from HuggingFace via Ollama (bare metal)
+
+Ollama natively understands `hf.co/...` URIs, so you can grab any community
+GGUF directly. No Modelfile required.
 
 ```bash
-# Needs internet once, ~8 GB
-ollama pull cliu/HuatuoGPT-o1-7B:latest
+# Pick a quant tag — Q4_K_M is the default, Q5_K_M for better quality
+ollama pull hf.co/mradermacher/HuatuoGPT-o1-7B-GGUF:Q4_K_M
 
-# Rename to the alias this project uses
-ollama cp cliu/HuatuoGPT-o1-7B:latest huatuo_o1_7b
+# Tell the app to use it
+echo 'OLLAMA_MODEL_NAME=hf.co/mradermacher/HuatuoGPT-o1-7B-GGUF:Q4_K_M' >> .env
 
-# Verify
-ollama list | grep huatuo_o1_7b
+ollama list   # verify the tag appears
 ```
 
-### Method B — import a GGUF from HuggingFace (most control)
-
-Best for air-gapped installs or when you need to pick a specific quantization
-(Q4_K_M balanced ≈ 4.7 GB, Q8_0 high-quality ≈ 8.1 GB):
+### Method B — pull from Ollama community
 
 ```bash
-# 1. Download a single GGUF file (pick any quant from the file list on HF)
-#    Listing: https://huggingface.co/bartowski/HuatuoGPT-o1-7B-GGUF/tree/main
+ollama pull cliu/HuatuoGPT-o1-7B:latest
+echo 'OLLAMA_MODEL_NAME=cliu/HuatuoGPT-o1-7B:latest' >> .env
+```
+
+### Method C — local GGUF + Modelfile (air-gapped / custom prompts)
+
+```bash
+# 1. Drop a GGUF file next to the Modelfile
 wget https://huggingface.co/bartowski/HuatuoGPT-o1-7B-GGUF/resolve/main/HuatuoGPT-o1-7B-Q4_K_M.gguf
 
-# 2. Modelfile — mind the FROM path
+# 2. Modelfile
 cat > Modelfile <<'EOF'
 FROM ./HuatuoGPT-o1-7B-Q4_K_M.gguf
 PARAMETER temperature 0.3
@@ -207,26 +227,23 @@ TEMPLATE """<|im_start|>system
 """
 EOF
 
-# 3. Register under the project's expected name
-ollama create huatuo_o1_7b -f Modelfile
-
-# 4. Verify
-ollama list | grep huatuo_o1_7b
+# 3. Register under any name you like
+ollama create my_huatuo -f Modelfile
+echo 'OLLAMA_MODEL_NAME=my_huatuo' >> .env
 ```
 
-### Method C — use a different model (low-memory fallback)
+### Method D — different model (low-memory fallback)
 
-The project isn't hard-bound to HuatuoGPT. If your machine can't carry a 7B model,
-swap in any Ollama-supported Chinese model and override the env var:
+The project isn't hard-bound to HuatuoGPT. Swap in any Ollama-supported model:
 
 ```bash
 ollama pull qwen2.5:3b
 echo 'OLLAMA_MODEL_NAME=qwen2.5:3b' >> .env
 ```
 
-> Heads-up: non-medical models occasionally emit extra prose around the strict-JSON
-> task-card response, which can fail parsing. The project has a retry fallback, but
-> for clinical use stick with HuatuoGPT-o1-7B.
+> Heads-up: non-medical models occasionally emit extra prose around the
+> strict-JSON task-card response, which can fail parsing. The project has a
+> retry fallback, but for clinical use stick with HuatuoGPT-o1-7B.
 
 ### Start the Ollama service
 
@@ -272,9 +289,59 @@ curl -s http://localhost:8000/health
 
 ---
 
+## 🔐 Authentication & PII encryption
+
+The system runs in **one of three auth modes**, chosen automatically at startup:
+
+| Mode | When | What happens |
+|---|---|---|
+| **Disabled** | `AUTH_TOKEN` empty *and* user store empty | All endpoints open. Dev / LAN only. |
+| **Bootstrap (single token)** | `AUTH_TOKEN` set, user store empty | First request bootstraps an `admin` user whose API key equals `AUTH_TOKEN`. |
+| **Multi-user** | User store has any user | Every request must carry a valid `X-Auth-Token` issued via `/api/auth/tokens`. |
+
+Three roles are enforced server-side: `admin` (full access incl. audit log), `nurse` (read EHR + write nursing events), `caregiver` (own tasks only).
+
+```bash
+# Bootstrap an admin token on first deploy
+export AUTH_TOKEN=$(openssl rand -hex 32)
+
+# Create a nurse account
+curl -X POST http://localhost:8000/api/auth/users \
+  -H "X-Auth-Token: $AUTH_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"username":"wang_nurse","display_name":"Nurse Wang","role":"nurse"}'
+
+# Issue an API key (the token in the response is shown ONCE — save it now)
+curl -X POST http://localhost:8000/api/auth/tokens \
+  -H "X-Auth-Token: $AUTH_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"user_id":"usr_xxxxx","label":"mobile-app"}'
+
+# Inspect the current identity / mode
+curl http://localhost:8000/api/auth/me -H "X-Auth-Token: $TOKEN"
+```
+
+### PII field-level encryption
+
+Set `PII_ENCRYPTION_KEY` (Fernet, 44 chars, URL-safe base64) and 10 sensitive
+fields (name, gov ID, phone, address, contacts, allergies, …) are stored
+encrypted at rest. Audit-log diffs strip the same fields automatically so logs
+don't leak the very PII they're meant to track.
+
+Generate a key with:
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+Both `AUTH_TOKEN` and `PII_ENCRYPTION_KEY` belong in `.env` (which is git-ignored).
+Rotating `PII_ENCRYPTION_KEY` requires re-encrypting existing rows — automated
+key rotation is on the [roadmap](#%EF%B8%8F-roadmap).
+
+---
+
 ## 🔌 API overview
 
-All endpoints live under `/api/*`. No auth by default — designed for a LAN deployment. If you expose it to the internet, put a reverse proxy with Basic Auth / OAuth in front.
+All endpoints live under `/api/*` and are protected by **token-based authentication** (see [Authentication & PII encryption](#-authentication--pii-encryption) below). For LAN-only deployments you can disable auth by leaving `AUTH_TOKEN` empty *and* keeping the user store empty — but doing this on a public network is not recommended. Always put a reverse proxy with TLS in front when exposing the service to the internet.
 
 ### EHR management
 
@@ -315,24 +382,40 @@ All endpoints live under `/api/*`. No auth by default — designed for a LAN dep
 ```
 .
 ├── app/
-│   ├── core/config.py          # Models, paths, hyperparams, prompt templates
+│   ├── core/config.py              # Models, paths, hyperparams, prompt templates
+│   ├── middleware/auth.py          # 3-mode token auth (disabled / bootstrap / multi-user)
+│   ├── models/
+│   │   ├── schemas.py              # EHR + nursing pydantic models
+│   │   └── auth_schemas.py         # User / API key / role models
 │   ├── routers/
-│   │   ├── ehr.py              # Profile CRUD + record upload + OCR
-│   │   └── nursing.py          # RAG decision + task card + event loop
+│   │   ├── auth.py                 # /api/auth/* (users, tokens, me)
+│   │   ├── ehr.py                  # Profile CRUD + record upload + OCR
+│   │   └── nursing.py              # RAG decision + task card + event loop
 │   └── services/
-│       ├── retrieval.py        # Hybrid retrieval (Dense + BM25 + RRF)
-│       ├── decision_memory.py  # Decision memory + outcome feedback
-│       ├── llm_service.py      # Ollama client (stream / non-stream)
-│       └── ocr_service.py      # RapidOCR → Tesseract fallback
+│       ├── retrieval.py            # Hybrid retrieval (Dense + BM25 + RRF)
+│       ├── decision_memory.py      # Decision memory + outcome feedback
+│       ├── llm_service.py          # Ollama client (stream / non-stream)
+│       ├── ocr_service.py          # RapidOCR → Tesseract fallback
+│       ├── user_store.py           # User + API-key storage (SQLite)
+│       ├── audit_log.py            # Operation audit + PII-redacted diff
+│       ├── pii_crypto.py           # Fernet encryption for 10 sensitive fields
+│       ├── event_store.py          # Nursing event SQLite persistence
+│       ├── permissions.py          # RBAC helpers (admin / nurse / caregiver)
+│       └── protocol_loader.py      # Hot-reloadable protocol templates
+├── data/protocols.yaml             # Editable nursing protocol templates
 ├── static/
-│   ├── index.html              # Admin UI
-│   ├── nurse.html              # Caregiver UI
-│   ├── design/                 # Liquid-glass design system
-│   ├── pet/                    # Desktop-pet animations
-│   └── sw.js / manifest.json   # PWA support
-├── scripts/run.sh              # One-shot launcher
-├── main.py                     # FastAPI entrypoint
-└── requirements.txt
+│   ├── index.html                  # Admin UI
+│   ├── nurse.html                  # Caregiver UI
+│   ├── design/                     # Liquid-glass design system
+│   ├── pet/                        # Desktop-pet animations
+│   └── sw.js / manifest.json       # PWA support
+├── scripts/run.sh                  # One-shot launcher
+├── main.py                         # FastAPI entrypoint
+├── requirements.txt
+├── Dockerfile
+├── docker-compose.yml              # One-shot stack: app + ollama + model auto-pull
+├── docker-compose.gpu.yml          # Optional NVIDIA GPU overlay
+└── .env.example                    # Environment template
 ```
 
 ### On-disk data directories
@@ -341,16 +424,133 @@ All endpoints live under `/api/*`. No auth by default — designed for a LAN dep
 ./local_ehr_db/                           # ChromaDB (most important, back this up!)
 ./local_ehr_uploads/<pid>/photos/         # Original record photos
 ./local_ehr_uploads/<pid>/ocr/            # OCR text output
-./local_nursing_events/events.json        # Nursing event stream
+./local_auth/users.db                     # Users + hashed API keys
+./local_audit_log/audit.db                # Operation audit trail (compliance)
+./local_nursing_events/events.db          # Nursing event stream
 ~/.cache/torch/sentence_transformers/     # Embedding offline cache
-~/.ollama/models/                         # huatuo_o1_7b weights
+~/.ollama/models/                         # LLM weights
 ```
 
 ---
 
 ## 🏭 Production deployment
 
-### Run it under systemd (recommended)
+### Option A · Docker Compose (recommended ⭐)
+
+One command brings up **Ollama + auto-pulled HuatuoGPT-o1-7B + backend + UI**:
+
+```bash
+# 1. Prepare env file
+cp .env.example .env
+
+# 2. Fill in the two required secrets
+echo "AUTH_TOKEN=$(openssl rand -hex 32)" >> .env
+echo "PII_ENCRYPTION_KEY=$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')" >> .env
+
+# 3. Start the stack
+#    First run pulls ~4.8 GB from HuggingFace (HuatuoGPT-o1-7B Q4_K_M).
+docker compose up -d
+
+# 4. Watch the model download finish
+docker compose logs -f model-puller   # wait for "[model-puller] done."
+docker compose logs -f app            # backend logs
+
+# 5. Open http://localhost:8000
+```
+
+**What's inside?**
+
+| Service | Role | Notes |
+|---|---|---|
+| `ollama` | Local LLM inference engine | Bound to `127.0.0.1:11434` only — never exposed publicly |
+| `model-puller` | One-shot container that runs `ollama pull` against HuggingFace | Exits instantly if the model is already cached |
+| `app` | ZhiHu YinBan backend + UI | Port `8000` |
+
+**Default model** = `hf.co/mradermacher/HuatuoGPT-o1-7B-GGUF:Q4_K_M` (~4.8 GB, runs on CPU).
+Override via `.env`:
+
+```env
+# Tighter memory budget (~3.9 GB)
+OLLAMA_MODEL_NAME=hf.co/mradermacher/HuatuoGPT-o1-7B-GGUF:Q3_K_M
+# Recommended quality (~5.5 GB, needs ~12 GB RAM)
+OLLAMA_MODEL_NAME=hf.co/mradermacher/HuatuoGPT-o1-7B-GGUF:Q5_K_M
+# Near-lossless (~8.2 GB, needs 16 GB+ RAM)
+OLLAMA_MODEL_NAME=hf.co/mradermacher/HuatuoGPT-o1-7B-GGUF:Q8_0
+# Or swap to a different model entirely
+OLLAMA_MODEL_NAME=qwen2.5:7b
+```
+
+**NVIDIA GPU?** Layer the GPU overlay on top:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+docker exec yinban-ollama nvidia-smi
+```
+
+> Requires the [NVIDIA Container Toolkit](https://github.com/NVIDIA/nvidia-container-toolkit) on the host.
+
+**Day-2 ops:**
+
+```bash
+docker compose ps                 # status
+docker compose logs -f app        # tail backend logs
+docker compose exec app sh        # shell into the app container
+docker compose restart app        # restart only the backend
+docker compose down               # stop services, KEEP volumes
+docker compose down -v            # WIPE everything (model, EHR, audit, ...)
+```
+
+**Volumes (preserved across `docker compose down`):**
+
+| Volume | Contents | Back up? |
+|---|---|---|
+| `ollama_models` | LLM weights | No (can re-download) |
+| `ehr_db` | ChromaDB vectors (records) | ✅ Yes |
+| `ehr_uploads` | Original record photos + OCR | ✅ Yes |
+| `auth_data` | Users + API keys | ✅ Yes |
+| `audit_log` | Operation audit trail | ✅ Yes (compliance) |
+| `nursing_events` | Nursing event stream | ✅ Yes |
+
+Backup snippet:
+```bash
+docker run --rm \
+  -v zhihu-yinban_ehr_db:/src/ehr_db:ro \
+  -v zhihu-yinban_auth_data:/src/auth_data:ro \
+  -v zhihu-yinban_audit_log:/src/audit_log:ro \
+  -v zhihu-yinban_ehr_uploads:/src/ehr_uploads:ro \
+  -v zhihu-yinban_nursing_events:/src/nursing_events:ro \
+  -v $(pwd):/dst alpine \
+  tar czf /dst/yinban-backup-$(date +%F).tgz -C /src .
+```
+
+---
+
+### Option B · Single container (debug only)
+
+Use this only when you already run Ollama yourself somewhere else:
+
+```bash
+docker build -t zhihu-yinban .
+docker run -d --name yinban \
+  -p 8000:8000 \
+  -e AUTH_TOKEN=$(openssl rand -hex 32) \
+  -e PII_ENCRYPTION_KEY=$(python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())") \
+  -e OLLAMA_API_URL=http://host.docker.internal:11434/api/generate \
+  -e OLLAMA_MODEL_NAME=hf.co/mradermacher/HuatuoGPT-o1-7B-GGUF:Q4_K_M \
+  --add-host=host.docker.internal:host-gateway \
+  -v yinban_ehr_db:/app/local_ehr_db \
+  -v yinban_ehr_uploads:/app/local_ehr_uploads \
+  -v yinban_auth:/app/local_auth \
+  -v yinban_audit_log:/app/local_audit_log \
+  -v yinban_nursing_events:/app/local_nursing_events \
+  zhihu-yinban
+```
+
+> ⚠️ All five volumes are required. Miss any one and you'll lose data on container recreate. Compose handles this for you — prefer Option A.
+
+---
+
+### Option C · systemd on bare metal
 
 `/etc/systemd/system/zhihuyinban.service`:
 
@@ -396,10 +596,18 @@ journalctl -u zhihuyinban -f   # live logs
 - [x] Hybrid retrieval (Dense + BM25 + RRF)
 - [x] Task cards (strict JSON)
 - [x] SSE streaming
-- [x] Decision memory + outcome feedback
+- [x] Decision memory + outcome feedback (L4 closed loop)
+- [x] User identity + multi-API-key + roles (admin / nurse / caregiver)
+- [x] Operation audit log (every write captured)
+- [x] PII field-level encryption (10 fields, Fernet)
+- [x] Audit-diff PII redaction
+- [x] Nursing events persisted to SQLite
+- [x] Hot-reloadable nursing protocol templates
+- [x] One-shot Docker Compose with auto HuggingFace model pull
 - [ ] Multi-tenant data isolation (`tenant_id`)
 - [ ] PDF export for SBAR handoffs
 - [ ] Offline PWA bundle for caregiver tablets
+- [ ] Automated key rotation
 - [ ] Fine-tuning script: feed local decision logs back into a huatuo LoRA
 
 ---

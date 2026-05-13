@@ -570,6 +570,8 @@ curl "http://localhost:8000/api/ehr/audit?patient_id=p001&limit=20" \
 ├── main.py                         # 应用入口
 ├── requirements.txt
 ├── Dockerfile
+├── docker-compose.yml              # 一键部署：app + ollama + 模型自动拉取
+├── docker-compose.gpu.yml          # NVIDIA GPU overlay（可选）
 └── .env.example                    # 环境变量模板
 ```
 
@@ -590,21 +592,121 @@ curl "http://localhost:8000/api/ehr/audit?patient_id=p001&limit=20" \
 
 ## 🏭 生产部署
 
-### Docker
+### 方式 A：Docker Compose 一键部署（推荐 ⭐）
+
+最快的方式 —— 一行命令拉起 **ollama + 模型自动下载 + 后端 + 前端**：
+
+```bash
+# 1. 准备环境变量
+cp .env.example .env
+
+# 2. 在 .env 里填两个必填项
+echo "AUTH_TOKEN=$(openssl rand -hex 32)" >> .env
+echo "PII_ENCRYPTION_KEY=$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')" >> .env
+
+# 3. 启动（首次会从 HuggingFace 下载 HuatuoGPT-o1-7B GGUF，约 4.8 GB）
+docker compose up -d
+
+# 4. 看日志确认模型拉完
+docker compose logs -f model-puller   # 看到 "[model-puller] done." 就是好了
+docker compose logs -f app            # 后端启动日志
+
+# 5. 浏览器访问 http://localhost:8000
+```
+
+**包含哪些服务？**
+
+| 服务 | 作用 | 备注 |
+|---|---|---|
+| `ollama` | 本地大模型推理引擎 | 仅绑定 `127.0.0.1:11434`，不暴露公网 |
+| `model-puller` | 一次性容器，自动 `ollama pull` 7B 模型 | 模型已存在则秒退 |
+| `app` | 智护银伴 后端 + 前端 | 端口 `8000` |
+
+**默认拉取的模型** = `hf.co/mradermacher/HuatuoGPT-o1-7B-GGUF:Q4_K_M`（约 4.8 GB，CPU 也能跑）。
+想换量化档位 / 换模型，改 `.env` 里 `OLLAMA_MODEL_NAME` 即可：
+
+```env
+# 极省内存（约 3.9 GB）
+OLLAMA_MODEL_NAME=hf.co/mradermacher/HuatuoGPT-o1-7B-GGUF:Q3_K_M
+# 推荐质量（约 5.5 GB，需 12 GB 内存）
+OLLAMA_MODEL_NAME=hf.co/mradermacher/HuatuoGPT-o1-7B-GGUF:Q5_K_M
+# 接近无损（约 8.2 GB，需 16 GB+ 内存）
+OLLAMA_MODEL_NAME=hf.co/mradermacher/HuatuoGPT-o1-7B-GGUF:Q8_0
+# 用通义千问做对比
+OLLAMA_MODEL_NAME=qwen2.5:7b
+```
+
+**有 NVIDIA GPU？** 加一个 overlay：
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+docker exec yinban-ollama nvidia-smi   # 确认 GPU 可见
+```
+
+> 前提：宿主机已装 [NVIDIA Container Toolkit](https://github.com/NVIDIA/nvidia-container-toolkit)。
+
+**常用运维命令：**
+
+```bash
+docker compose ps                      # 查看状态
+docker compose logs -f app             # 跟踪后端日志
+docker compose exec app sh             # 进容器调试
+docker compose restart app             # 只重启业务，不重启 ollama
+docker compose down                    # 停服务，但保留所有数据卷
+docker compose down -v                 # ⚠️ 连数据一起删（含模型、病历、审计）
+```
+
+**数据卷一览**（`docker compose down` 不会删除）：
+
+| 卷名 | 内容 | 必须备份？ |
+|---|---|---|
+| `ollama_models` | 大模型权重 | 否（可重新下载） |
+| `ehr_db` | ChromaDB 向量库（病历） | ✅ **是** |
+| `ehr_uploads` | 病历原图 + OCR | ✅ **是** |
+| `auth_data` | 用户 + API Key | ✅ **是** |
+| `audit_log` | 操作审计 | ✅ **是**（合规必备） |
+| `nursing_events` | 护理事件流 | ✅ **是** |
+
+备份示例：
+```bash
+docker run --rm \
+  -v zhihu-yinban_ehr_db:/src/ehr_db:ro \
+  -v zhihu-yinban_auth_data:/src/auth_data:ro \
+  -v zhihu-yinban_audit_log:/src/audit_log:ro \
+  -v zhihu-yinban_ehr_uploads:/src/ehr_uploads:ro \
+  -v zhihu-yinban_nursing_events:/src/nursing_events:ro \
+  -v $(pwd):/dst alpine \
+  tar czf /dst/yinban-backup-$(date +%F).tgz -C /src .
+```
+
+---
+
+### 方式 B：单容器手动跑（不推荐，仅供调试）
+
+只适合"已经在外面跑了 Ollama"的场景：
 
 ```bash
 docker build -t zhihu-yinban .
 docker run -d --name yinban \
   -p 8000:8000 \
-  -v ./data:/app/local_ehr_db \
-  -v ./uploads:/app/local_ehr_uploads \
-  -v ./auth:/app/local_auth \
   -e AUTH_TOKEN=$(openssl rand -hex 32) \
   -e PII_ENCRYPTION_KEY=$(python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())") \
+  -e OLLAMA_API_URL=http://host.docker.internal:11434/api/generate \
+  -e OLLAMA_MODEL_NAME=hf.co/mradermacher/HuatuoGPT-o1-7B-GGUF:Q4_K_M \
+  --add-host=host.docker.internal:host-gateway \
+  -v yinban_ehr_db:/app/local_ehr_db \
+  -v yinban_ehr_uploads:/app/local_ehr_uploads \
+  -v yinban_auth:/app/local_auth \
+  -v yinban_audit_log:/app/local_audit_log \
+  -v yinban_nursing_events:/app/local_nursing_events \
   zhihu-yinban
 ```
 
-### systemd
+> ⚠️ 必须挂 5 个卷，少一个就会丢数据。Compose 帮你处理好了，强烈推荐用方式 A。
+
+---
+
+### 方式 C：systemd（裸机部署）
 
 ```ini
 [Unit]
@@ -623,16 +725,25 @@ RestartSec=10
 WantedBy=multi-user.target
 ```
 
-### 数据备份
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now zhihuyinban
+journalctl -u zhihuyinban -f
+```
+
+### 数据备份（裸机部署）
 
 **务必每日备份以下目录**：
 - `local_ehr_db/` — 全部向量数据
 - `local_auth/` — 用户身份
 - `local_audit_log/` — 审计留痕
 - `local_ehr_uploads/` — 病历原图
+- `local_nursing_events/` — 护理事件流
 
 ```bash
-tar czf backup-$(date +%F).tgz local_ehr_db/ local_auth/ local_audit_log/ local_ehr_uploads/
+tar czf backup-$(date +%F).tgz \
+  local_ehr_db/ local_auth/ local_audit_log/ \
+  local_ehr_uploads/ local_nursing_events/
 ```
 
 ---
@@ -650,6 +761,7 @@ tar czf backup-$(date +%F).tgz local_ehr_db/ local_auth/ local_audit_log/ local_
 - [x] 审计 diff 防泄密
 - [x] 护理事件 SQLite 持久化
 - [x] 护理协议模板热加载
+- [x] Docker Compose 一键部署 + HuggingFace 模型自动拉取
 - [ ] 多机构数据隔离 (tenant_id)
 - [ ] 交接单 PDF 导出
 - [ ] 护工端离线 PWA 打包
