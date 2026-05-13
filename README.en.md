@@ -627,6 +627,7 @@ This project is licensed under the **[PolyForm Noncommercial License 1.0.0](./LI
 - ✅ Allowed: personal study / research, teaching, public-interest use, internal use inside nonprofit hospitals and elderly-care homes, and modification / redistribution for any noncommercial purpose (this license must be preserved).
 - ❌ Not allowed: any commercial use of the project or its derivatives — including selling it as a product or SaaS, offering paid deployment / hosting, or bundling it into commercial software.
 - 📮 For a **commercial license**, please reach out separately: [@jiahuacaogoodman-art](https://github.com/jiahuacaogoodman-art)
+- 🏥 **Private elderly-care institutions** interested in commercial cooperation can contact for the production version: **jiahuacaogoodman@gmail.com**
 
 Copyright © 2026 [jiahuaCao](https://github.com/jiahuacaogoodman-art)
 
