@@ -16,7 +16,7 @@ from app.models.schemas import (
 )
 from app.middleware.auth import get_current_user
 from app.services.audit_log import get_audit_log
-from app.services.llm_service import OllamaLLMService
+from app.services.llm_service import get_llm_service
 from app.services.pii_crypto import decrypt_pii_fields
 from app.services.retrieval import HybridRetriever, format_evidence_block, legacy_context_string
 from app.services.decision_memory import DecisionMemory, format_memory_block
@@ -24,7 +24,8 @@ from app.services.user_store import User
 from app.core.config import RAG_PROMPT_TEMPLATE, OLLAMA_MODEL_NAME
 
 router = APIRouter()
-llm_service = OllamaLLMService()
+# 工厂根据 LLM_PROVIDER（ollama / openai）选 provider，路由层零感知。
+llm_service = get_llm_service()
 # 与 ehr 路由共用同一个审计实例（全局 singleton）
 audit = get_audit_log()
 

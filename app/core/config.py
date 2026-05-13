@@ -32,11 +32,37 @@ EMBEDDING_MODEL_NAME = "BAAI/bge-small-zh-v1.5"
 # 建议在支持 CUDA 的环境中将设备设为 'cuda'
 EMBEDDING_DEVICE = "cpu"
 
-# --- 本地大语言模型 (LLM) 配置 ---
+# --- 大语言模型 (LLM) 配置 ---
+# 项目支持两种 provider：
+#   - "ollama"  本地 Ollama（默认，向后兼容）
+#   - "openai"  任何 OpenAI 兼容协议端点（vLLM / TGI / SGLang / DeepSeek / 智谱 / Qwen 等）
+# 切换不需要改代码，只需要改 .env：
+#     LLM_PROVIDER=openai
+#     OPENAI_API_BASE=http://gpu-host:8000/v1
+#     OPENAI_MODEL=Qwen/Qwen2.5-7B-Instruct
+LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "ollama").strip().lower()
+
+# 全 provider 共用的请求超时（秒）。生成长任务卡建议 ≥ 180s。
+LLM_TIMEOUT_SECONDS: int = int(os.getenv("LLM_TIMEOUT_SECONDS", "180"))
+
+# --- Ollama provider 配置 ---
 # Ollama 服务的 API 地址（支持通过环境变量指向远程 Ollama 实例）
-OLLAMA_API_URL = os.getenv("OLLAMA_API_URL", "http://localhost:11434/api/generate")
+OLLAMA_API_URL: str = os.getenv("OLLAMA_API_URL", "http://localhost:11434/api/generate")
 # 本地运行的模型名称（可通过 .env 切换为 qwen2.5:3b 等替代模型）
-OLLAMA_MODEL_NAME = os.getenv("OLLAMA_MODEL_NAME", "huatuo_o1_7b")
+OLLAMA_MODEL_NAME: str = os.getenv("OLLAMA_MODEL_NAME", "huatuo_o1_7b")
+
+# --- OpenAI 兼容 provider 配置 ---
+# OPENAI_API_BASE：兼容端点的根，**不要**带 /chat/completions 后缀。
+#   vLLM:        http://gpu-host:8000/v1
+#   TGI:         http://gpu-host:8080/v1
+#   llama.cpp:   http://localhost:8080/v1
+#   DeepSeek:    https://api.deepseek.com/v1
+#   智谱:        https://open.bigmodel.cn/api/paas/v4
+# OPENAI_API_KEY：可选；自建服务通常留空，云端 API 必填。
+# OPENAI_MODEL：模型名，对应 vLLM 的 --served-model-name 或云端模型 ID。
+OPENAI_API_BASE: str = os.getenv("OPENAI_API_BASE", "")
+OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
+OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "")
 
 # --- 鉴权配置 ---
 # AUTH_TOKEN：所有 /api/* 和 /uploads/* 请求必须携带请求头 X-Auth-Token: <token>。
