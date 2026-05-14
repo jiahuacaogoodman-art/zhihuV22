@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
     智护银伴 · Docker 数据卷备份（Windows）
@@ -36,6 +36,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+$ErrorActionPreference = 'Stop'
+
 $ScriptDir   = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $ProjectDir  = Split-Path -Parent $ScriptDir
 Set-Location $ProjectDir
@@ -65,7 +67,7 @@ function Resolve-Volume {
         $Suffix
     )
     foreach ($name in $candidates) {
-        $exists = docker volume inspect $name 2>$null
+        docker volume inspect $name 2>$null | Out-Null
         if ($LASTEXITCODE -eq 0) { return $name }
     }
     return $null
@@ -87,7 +89,8 @@ if ($missing) {
     Write-Host '  当前所有 volume：'
     docker volume ls --filter 'name=ehr|auth|audit|nursing'
     if (-not ($volumes.Values | Where-Object { $_ })) {
-        Write-Error '没有任何业务卷可备份。先运行 docker compose up -d'
+        Write-Host ''
+        Write-Host "$([char]0x2718) 没有任何业务卷可备份。先运行 docker compose up -d" -ForegroundColor Red
         exit 1
     }
 }

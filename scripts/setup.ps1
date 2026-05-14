@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
     智护银伴 · Windows 一键部署向导（PowerShell 版）
@@ -49,7 +49,6 @@ $ProgressPreference    = 'SilentlyContinue'
 $ScriptDir   = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $ProjectDir  = Split-Path -Parent $ScriptDir
 $EnvFile     = Join-Path $ProjectDir '.env'
-$EnvExample  = Join-Path $ProjectDir '.env.example'
 Set-Location $ProjectDir
 
 # ── 输出工具 ─────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
     把前端依赖的 CDN 资源下载到本地 static\vendor\，让系统完全离线可用

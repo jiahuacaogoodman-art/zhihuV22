@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
     智护银伴 Windows 环境诊断（独立可调用）
@@ -87,13 +87,13 @@ function Write-Section {
 }
 
 # ── 工具函数 ─────────────────────────────────────────────────
-function Test-CommandExists {
+function Test-CommandExist {
     param([string]$Name)
     $null -ne (Get-Command -Name $Name -ErrorAction SilentlyContinue)
 }
 
 function Get-DockerInfo {
-    if (-not (Test-CommandExists 'docker')) { return $null }
+    if (-not (Test-CommandExist 'docker')) { return $null }
     try {
         $info = docker info --format '{{json .}}' 2>$null | ConvertFrom-Json -ErrorAction SilentlyContinue
         return $info
@@ -140,7 +140,7 @@ if ($execPolicy -in @('Restricted', 'AllSigned')) {
 Write-Section 'Docker 与 Compose'
 
 $dockerOk = $false
-if (Test-CommandExists 'docker') {
+if (Test-CommandExist 'docker') {
     try {
         $dockerVersion = (docker --version 2>$null) -join ''
         Add-Result 'Docker' 'OK' $dockerVersion
@@ -169,7 +169,7 @@ if ($dockerOk) {
     } catch {}
 
     if (-not $composeOk) {
-        if (Test-CommandExists 'docker-compose') {
+        if (Test-CommandExist 'docker-compose') {
             $composeV1 = (docker-compose --version 2>$null) -join ''
             Add-Result 'Docker Compose' 'WARN' "$composeV1 (V1 已 EOL)" `
                 '升级 Docker Desktop 到最新版即自带 Compose V2'
@@ -216,7 +216,7 @@ if (-not $Quick) {
     $gpuFound = $false
 
     # Method 1: nvidia-smi.exe in PATH (Win drivers)
-    if (Test-CommandExists 'nvidia-smi') {
+    if (Test-CommandExist 'nvidia-smi') {
         try {
             $gpuLine = (nvidia-smi --query-gpu=name,memory.total --format=csv,noheader 2>$null | Select-Object -First 1)
             if ($gpuLine) {
@@ -340,7 +340,7 @@ try {
 }
 
 # Git core.autocrlf 检测（防止脚本被 CRLF 污染）
-if (Test-CommandExists 'git') {
+if (Test-CommandExist 'git') {
     try {
         $autocrlf = (git config --get core.autocrlf 2>$null)
         if ($autocrlf -eq 'true' -or $autocrlf -eq 'input') {
@@ -374,9 +374,11 @@ try {
 # ── 6. 系统资源 ──────────────────────────────────────────────
 Write-Section '系统资源'
 
+$memChecked = $false
 try {
     $os = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction Stop
     $totalMemGB = [math]::Round($os.TotalVisibleMemorySize / 1MB, 1)
+    $memChecked = $true
     if ($totalMemGB -lt 8) {
         Add-Result '系统内存' 'FAIL' "${totalMemGB} GB (< 8 GB 跑不动 7B 模型)" `
             '换更小的模型：编辑 .env 设 OLLAMA_MODEL_NAME=qwen2.5:3b'
@@ -389,6 +391,11 @@ try {
         Write-CheckLine '系统内存' 'OK' "${totalMemGB} GB"
     }
 } catch {}
+
+if (-not $memChecked) {
+    Add-Result '系统内存' 'INFO' '非 Windows 环境，跳过' ''
+    Write-CheckLine '系统内存' 'INFO' '非 Windows 环境，跳过'
+}
 
 # ── 7. 网络 / 代理 ───────────────────────────────────────────
 Write-Section '网络环境'
@@ -416,13 +423,21 @@ try {
 } catch {}
 
 # 防火墙
+$fwChecked = $false
 try {
     $fw = Get-NetFirewallProfile -ErrorAction Stop | Where-Object { $_.Enabled -eq $true }
+    $fwChecked = $true
     if ($fw) {
         Add-Result 'Windows 防火墙' 'INFO' "已启用 $($fw.Count) 个配置文件 (首次绑端口可能弹窗)" ''
         Write-CheckLine 'Windows 防火墙' 'INFO' "已启用 (首次绑端口可能弹窗)"
     }
 } catch {}
+
+if (-not $fwChecked -and -not $envProxy) {
+    # 非 Windows 时也输出一行，避免章节空白
+    Add-Result '防火墙' 'INFO' '非 Windows 环境，跳过' ''
+    Write-CheckLine '防火墙' 'INFO' '非 Windows 环境，跳过'
+}
 
 # ── 8. 输出汇总 ──────────────────────────────────────────────
 if ($Json) {

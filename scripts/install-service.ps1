@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 #Requires -RunAsAdministrator
 <#
 .SYNOPSIS
@@ -75,7 +75,8 @@ if ($existing) {
 $startScript = Join-Path $ProjectDir 'scripts\_service-start.ps1'
 $logFile     = Join-Path $ProjectDir 'service.log'
 
-@"
+$utf8WithBom = New-Object System.Text.UTF8Encoding($true)
+[System.IO.File]::WriteAllText($startScript, @"
 # 自动生成 - 由 install-service.ps1 创建
 # 修改本文件请重跑 install-service.ps1
 `$ErrorActionPreference = 'Continue'
@@ -114,7 +115,7 @@ if (`$LASTEXITCODE -eq 0) {
 } else {
     "[`$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] ERROR: docker compose up failed" | Out-File -FilePath '$logFile' -Append -Encoding UTF8
 }
-"@ | Set-Content -Path $startScript -Encoding UTF8
+"@, $utf8WithBom)
 
 Write-Host ''
 Write-Host '正在注册 Windows 计划任务...' -ForegroundColor Cyan
