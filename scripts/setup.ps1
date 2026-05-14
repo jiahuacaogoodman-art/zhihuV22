@@ -39,7 +39,9 @@
 param(
     [switch]$NonInteractive,
     [switch]$SkipPreflight,
-    [switch]$Reset
+    [switch]$Reset,
+    # DryRun: 只生成 .env，不启动 docker compose（CI / 演练场景）
+    [switch]$DryRun
 )
 
 $ErrorActionPreference = 'Stop'
@@ -476,6 +478,13 @@ if ($LlmProvider -eq 'ollama') {
 
 # ── Step 6: 启动 Compose ────────────────────────────────────
 Write-Header 'Step 6/7 · 启动服务'
+
+# DryRun: .env 已写完，不真启动 docker compose（CI / 演练场景）
+if ($DryRun) {
+    Write-Info 'DryRun 模式：.env 已生成，跳过 docker compose 启动'
+    Write-Host '  实际部署请去掉 -DryRun 重新运行' -ForegroundColor Cyan
+    exit 0
+}
 
 if (-not (Read-YesNo '  确认启动部署?' $true)) {
     Write-Info '已取消。配置文件已保存，稍后可手动运行：'

@@ -1,0 +1,260 @@
+name: Windows CI
+
+# 验证 Windows 部署脚本在真实 Windows runner 上的健康度。
+# 配套 PR #74 引入的 Windows 一键部署脚本，把"我自己手动测过"升级成
+# "GitHub Actions 每次 PR 都自动测"。
+#
+# 跑 4 个 job：
+#   1. ps-static-checks      - BOM + 语法 + Linter
+#   2. preflight-runs-clean  - preflight.ps1 真实 Windows runner 跑无异常
+#   3. setup-generates-env   - setup.ps1 -NonInteractive 生成的 .env 格式正确
+#   4. backup-fails-gracefully - backup.ps1 无数据卷时优雅失败
+#
+# 只在 PR 涉及 Windows 部署相关文件时触发，节省 CI 配额。
+
+on:
+  push:
+    branches: ["main", "feat/windows-**", "fix/windows-**"]
+    paths:
+      - "scripts/*.ps1"
+      - ".gitattributes"
+      - ".github/workflows/windows-ci.yml"
+  pull_request:
+    paths:
+      - "scripts/*.ps1"
+      - ".gitattributes"
+      - ".github/workflows/windows-ci.yml"
+
+jobs:
+  # ── 1. 静态检查：BOM + 语法 + Linter ─────────────────────────
+  ps-static-checks:
+    name: PowerShell Static Checks
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify all .ps1 have UTF-8 BOM
+        shell: pwsh
+        run: |
+          $missing = @()
+          foreach ($f in (Get-ChildItem scripts/*.ps1)) {
+              $bytes = [System.IO.File]::ReadAllBytes($f.FullName)
+              $hasBom = ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF)
+              if ($hasBom) { Write-Host "[OK]   $($f.Name)" -ForegroundColor Green }
+              else { Write-Host "[FAIL] $($f.Name) - missing BOM" -ForegroundColor Red; $missing += $f.Name }
+          }
+          if ($missing.Count -gt 0) {
+              Write-Error "PowerShell 5.1 reads UTF-8 NoBOM as system codepage; Chinese systems will get mojibake. Add BOM to: $($missing -join ', ')"
+              exit 1
+          }
+
+      - name: Parse all .ps1 files
+        shell: pwsh
+        run: |
+          $failed = $false
+          foreach ($f in (Get-ChildItem scripts/*.ps1)) {
+              $errors = $null; $tokens = $null
+              [System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$tokens, [ref]$errors) | Out-Null
+              if ($errors.Count -eq 0) { Write-Host "[OK] $($f.Name)" -ForegroundColor Green }
+              else {
+                  Write-Host "[FAIL] $($f.Name)" -ForegroundColor Red
+                  $errors | ForEach-Object { Write-Host "  L$($_.Extent.StartLineNumber): $($_.Message)" -ForegroundColor Red }
+                  $failed = $true
+              }
+          }
+          if ($failed) { exit 1 }
+
+      - name: Install PSScriptAnalyzer
+        shell: pwsh
+        run: Install-Module -Name PSScriptAnalyzer -Force -SkipPublisherCheck -AcceptLicense -Scope CurrentUser
+
+      - name: Run PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Import-Module PSScriptAnalyzer
+          $issues = @()
+          foreach ($f in (Get-ChildItem scripts/*.ps1)) {
+              $r = Invoke-ScriptAnalyzer -Path $f.FullName -Severity Error,Warning `
+                  -ExcludeRule PSAvoidUsingWriteHost,PSUseShouldProcessForStateChangingFunctions,PSAvoidUsingPositionalParameters,PSReviewUnusedParameter,PSAvoidUsingEmptyCatchBlock
+              foreach ($i in $r) {
+                  $issues += "[{0}] {1} L{2} {3}: {4}" -f $i.Severity, $f.Name, $i.Line, $i.RuleName, $i.Message
+              }
+          }
+          if ($issues.Count -gt 0) {
+              $issues | ForEach-Object { Write-Host $_ -ForegroundColor Yellow }
+              Write-Error "PSScriptAnalyzer found $($issues.Count) real issues"
+              exit 1
+          }
+          Write-Host "PSScriptAnalyzer: no issues" -ForegroundColor Green
+
+  # ── 2. preflight 在真 Windows 跑：必须无 PowerShell 异常 ─────
+  preflight-runs-clean:
+    name: preflight.ps1 runs without errors
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run preflight (Quick mode)
+        shell: pwsh
+        run: |
+          # 我们只关心：脚本本身能跑完不抛 PowerShell 异常 + 输出正常。
+          # preflight 在 GitHub runner 上会因 Docker Desktop 不可用而 FAIL，
+          # 但脚本流程必须完整、不能命令未找到。
+          # 重定向所有流到文件后 Get-Content 检查，避免 Write-Host 流捕获问题。
+          $ErrorActionPreference = 'Continue'
+          & ./scripts/preflight.ps1 -Quick *> preflight_out.log
+          $combined = Get-Content preflight_out.log -Raw -Encoding UTF8
+          Write-Host '--- preflight output ---'
+          Write-Host $combined
+          Write-Host '--- end ---'
+
+          # 1. 输出中必须包含汇总（脚本完整跑完）
+          if ($combined -notmatch '汇总') {
+              Write-Error "preflight did not reach summary section"
+              exit 1
+          }
+
+          # 2. 中文必须能正常显示（不能有锟斤拷之类乱码标志）
+          if ($combined -match '锟|烫|拷') {
+              Write-Error "preflight output contains mojibake (encoding issue)"
+              exit 1
+          }
+
+          # 3. 不能有未识别的命令（PSCommandNotFoundException 信号）
+          if ($combined -match 'is not recognized as a name of a cmdlet|CommandNotFoundException') {
+              Write-Error "preflight has unresolved cmdlet references"
+              exit 1
+          }
+
+          Write-Host "[OK] preflight ran cleanly" -ForegroundColor Green
+
+      - name: Run preflight -Json (must produce valid JSON)
+        shell: pwsh
+        run: |
+          $json = & ./scripts/preflight.ps1 -Quick -Json 2>$null
+          $parsed = $json | ConvertFrom-Json
+          Write-Host "Parsed $($parsed.Count) entries"
+          $parsed | ForEach-Object { Write-Host ('  {0,-25} {1,-5} {2}' -f $_.Item, $_.Status, $_.Detail) }
+          if ($parsed.Count -lt 5) { Write-Error 'JSON output too sparse'; exit 1 }
+
+  # ── 3. setup.ps1 NonInteractive：生成的 .env 格式正确 ─────────
+  setup-generates-env:
+    name: setup.ps1 generates valid .env
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify Docker is available on runner
+        shell: pwsh
+        run: docker --version
+
+      - name: Run setup.ps1 -DryRun -NonInteractive
+        shell: pwsh
+        run: |
+          # -DryRun: 让 setup.ps1 在写完 .env 后退出，不真启动 docker compose。
+          # 这是 CI 必须的，否则 Windows runner 的 Docker 默认是 Windows native
+          # containers 模式，拉 ollama/ollama 这类 Linux 镜像会立刻失败。
+          $ErrorActionPreference = 'Continue'
+          & ./scripts/setup.ps1 -SkipPreflight -NonInteractive -DryRun
+
+          if (-not (Test-Path .env)) {
+              Write-Error '.env was not created'
+              exit 1
+          }
+          Write-Host "[OK] .env was created" -ForegroundColor Green
+
+      - name: Validate .env format
+        shell: pwsh
+        run: |
+          # 1. UTF-8 NoBOM (docker compose 必须能读)
+          $bytes = [System.IO.File]::ReadAllBytes('.env')
+          if ($bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+              Write-Error '.env has UTF-8 BOM - docker compose will treat BOM as part of first key'
+              exit 1
+          }
+          Write-Host "[OK] .env is UTF-8 NoBOM" -ForegroundColor Green
+
+          # 2. LF 行尾（不能 CRLF，docker 容器内读取兼容性）
+          $content = [System.IO.File]::ReadAllText('.env')
+          if ($content -match "`r`n") {
+              Write-Error '.env has CRLF line endings'
+              exit 1
+          }
+          Write-Host "[OK] .env uses LF line endings" -ForegroundColor Green
+
+          # 3. AUTH_TOKEN = 64 hex chars
+          $authLine = Get-Content .env | Where-Object { $_ -match '^AUTH_TOKEN=' } | Select-Object -First 1
+          $authToken = $authLine -replace '^AUTH_TOKEN=', ''
+          if ($authToken.Length -ne 64) {
+              Write-Error "AUTH_TOKEN length is $($authToken.Length), expected 64"
+              exit 1
+          }
+          if ($authToken -notmatch '^[a-f0-9]{64}$') {
+              Write-Error "AUTH_TOKEN is not valid hex"
+              exit 1
+          }
+          Write-Host "[OK] AUTH_TOKEN: 64 hex chars" -ForegroundColor Green
+
+          # 4. PII_ENCRYPTION_KEY = 44 base64url chars
+          $piiLine = Get-Content .env | Where-Object { $_ -match '^PII_ENCRYPTION_KEY=' } | Select-Object -First 1
+          $piiKey = $piiLine -replace '^PII_ENCRYPTION_KEY=', ''
+          if ($piiKey.Length -ne 44) {
+              Write-Error "PII_ENCRYPTION_KEY length is $($piiKey.Length), expected 44"
+              exit 1
+          }
+          if ($piiKey -match '[+/]') {
+              Write-Error "PII_ENCRYPTION_KEY contains non-URL-safe chars"
+              exit 1
+          }
+          Write-Host "[OK] PII_ENCRYPTION_KEY: 44 URL-safe base64 chars" -ForegroundColor Green
+
+      - name: Verify Fernet key is Python-cryptography compatible
+        shell: pwsh
+        run: |
+          # 抽出生成的 key 用 Python Fernet 端到端验证：必须能加密含中文 PII
+          # 的字符串并正确解密回来。这保证了未来 PowerShell 升级或 base64
+          # 实现变更时不会悄悄破坏现有部署的解密。
+          $piiKey = (Get-Content .env | Where-Object { $_ -match '^PII_ENCRYPTION_KEY=' } | Select-Object -First 1) -replace '^PII_ENCRYPTION_KEY=', ''
+          python -m pip install cryptography --quiet
+          $code = @"
+          from cryptography.fernet import Fernet
+          key = b'$piiKey'
+          f = Fernet(key)
+          plaintext = '张奶奶 / 身份证 110101194501010001 / 床位 A-205'.encode('utf-8')
+          ct = f.encrypt(plaintext)
+          decrypted = f.decrypt(ct).decode('utf-8')
+          assert plaintext.decode('utf-8') == decrypted, 'roundtrip failed'
+          print(f'[OK] Fernet roundtrip with Chinese PII: {decrypted}')
+          "@
+          $code | python -
+
+  # ── 4. backup.ps1 优雅失败 ────────────────────────────────
+  backup-fails-gracefully:
+    name: backup.ps1 handles missing volumes
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run backup.ps1 with no volumes - should exit 1 cleanly
+        shell: pwsh
+        run: |
+          # Write-Host 在 PS7 走 information stream (6)。要把它跟 stderr 一起
+          # 捕获到变量做匹配，最稳的做法是先重定向到文件，再 Get-Content。
+          # 直接 *>&1 在某些 PS 版本上对 Write-Host 不可靠。
+          $ErrorActionPreference = 'Continue'
+          & ./scripts/backup.ps1 *> backup_out.log
+          $exitCode = $LASTEXITCODE
+          $combined = Get-Content backup_out.log -Raw -Encoding UTF8
+          Write-Host '--- backup.ps1 output ---'
+          Write-Host $combined
+          Write-Host '--- end ---'
+
+          if ($exitCode -ne 1) {
+              Write-Error "backup.ps1 should exit 1 when no volumes exist (got $exitCode)"
+              exit 1
+          }
+          if ($combined -notmatch '没有任何业务卷可备份|未找到') {
+              Write-Error 'backup.ps1 should print user-friendly error message'
+              exit 1
+          }
+          Write-Host "[OK] backup.ps1 fails gracefully with exit 1" -ForegroundColor Green
