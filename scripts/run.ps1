@@ -37,8 +37,34 @@ if (Test-Path $venvActivate) {
     Write-Host ''
 }
 
-# 检查 .env
-if (-not (Test-Path '.env')) {
+# 检查并加载 .env
+# 之前只判断 .env 是否存在，但没把里面的变量写入环境，导致 AUTH_TOKEN /
+# PII_ENCRYPTION_KEY 等关键配置在裸机启动时全部读不到。
+# main.py 里有 load_dotenv() 兜底，这里再注入一遍是为了让 uvicorn 子进程一定能看到。
+# 规则：已经显式设置在进程里的环境变量优先（不被 .env 覆盖）。
+if (Test-Path '.env') {
+    Write-Host '正在加载 .env 文件...' -ForegroundColor Cyan
+    Get-Content '.env' | ForEach-Object {
+        $line = $_.Trim()
+        # 跳过空行和注释
+        if (-not $line -or $line.StartsWith('#')) { return }
+        # 形如 KEY=VALUE；只在第一个 '=' 处切分，VALUE 可包含 =
+        $eq = $line.IndexOf('=')
+        if ($eq -lt 1) { return }
+        $key = $line.Substring(0, $eq).Trim()
+        $val = $line.Substring($eq + 1).Trim()
+        # 去掉两端引号
+        if (($val.StartsWith('"') -and $val.EndsWith('"')) -or
+            ($val.StartsWith("'") -and $val.EndsWith("'"))) {
+            $val = $val.Substring(1, $val.Length - 2)
+        }
+        # 已存在则不覆盖
+        if (-not [Environment]::GetEnvironmentVariable($key, 'Process')) {
+            [Environment]::SetEnvironmentVariable($key, $val, 'Process')
+        }
+    }
+    Write-Host '  .env 已加载' -ForegroundColor Green
+} else {
     Write-Warning '.env 文件不存在'
     Write-Host '  建议先运行：.\scripts\setup.ps1'
     Write-Host '  或手动创建：copy .env.example .env'
