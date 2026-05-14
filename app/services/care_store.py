@@ -203,12 +203,20 @@ class CareStore:
             care_level_key          TEXT NOT NULL DEFAULT '',
             actual_admission_date   TEXT NOT NULL DEFAULT '',
 
+            -- 离院信息（持久化财务数据）
+            discharge_date          TEXT NOT NULL DEFAULT '',
+            discharge_reason        TEXT NOT NULL DEFAULT '',
+            settlement_amount       REAL,
+            refund_amount           REAL,
+
             created_at              TEXT NOT NULL,
             updated_at              TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_admissions_status ON admissions(status);
         CREATE INDEX IF NOT EXISTS idx_admissions_name ON admissions(applicant_name);
         CREATE INDEX IF NOT EXISTS idx_admissions_patient ON admissions(patient_id);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_admissions_id_card_uniq
+            ON admissions(applicant_id_card) WHERE applicant_id_card != '' AND status NOT IN ('discharged', 'cancelled');
 
         -- 评估记录
         CREATE TABLE IF NOT EXISTS assessments (
@@ -799,15 +807,27 @@ class CareStore:
             rows = conn.execute(sql, params).fetchall()
         return [dict(r) for r in rows]
 
+    # 允许通过 extra_fields 更新的列白名单（防 SQL 注入）
+    _ADMISSION_MUTABLE_COLUMNS: frozenset = frozenset({
+        "assessment_id", "assessed_level", "assessment_conclusion", "assessed_at", "assessed_by",
+        "contract_id", "contract_signed_at",
+        "payment_id", "payment_status", "paid_at",
+        "patient_id", "bed_id", "bed_number", "care_level_key", "actual_admission_date",
+        "discharge_date", "discharge_reason", "settlement_amount", "refund_amount",
+        "notes",
+    })
+
     def update_admission_status(self, admission_id: str, new_status: str,
                                 operator: str = "", detail: str = "",
                                 extra_fields: Optional[dict] = None) -> Optional[dict]:
-        """更新入住申请状态，同时写入时间线。extra_fields 可追加更新其它字段。"""
+        """更新入住申请状态，同时写入时间线。extra_fields 可追加更新其它字段（白名单校验）。"""
         fields = ["status = ?", "updated_at = ?"]
         params: list = [new_status, self._now()]
         if extra_fields:
             for k, v in extra_fields.items():
                 if v is not None:
+                    if k not in self._ADMISSION_MUTABLE_COLUMNS:
+                        raise ValueError(f"不允许更新列 '{k}'，合法列: {sorted(self._ADMISSION_MUTABLE_COLUMNS)}")
                     fields.append(f"{k} = ?")
                     params.append(v)
         params.append(admission_id)
@@ -976,11 +996,11 @@ class CareStore:
             ).fetchall()
         return [dict(r) for r in rows]
 
-    # ── 办理入住 ──
+    # ── 办理入住（原子操作：床位分配 + 状态更新在同一事务内） ──
     def move_in(self, admission_id: str, bed_id: str, care_level_key: Optional[str] = None,
                 patient_id: Optional[str] = None, admission_date: Optional[str] = None,
                 operator: str = "") -> Optional[dict]:
-        """办理入住：分配床位 + 更新入住状态"""
+        """办理入住：在单一事务内完成床位分配 + 入住状态更新，保证原子性。"""
         now = self._now()
         admission = self.get_admission(admission_id)
         if not admission:
@@ -996,23 +1016,41 @@ class CareStore:
                     care_level_key = contract.get("care_level_key", "")
             if not care_level_key:
                 care_level_key = admission.get("assessed_level", "")
-        # 分配床位
-        bed = self.assign_bed(bed_id, patient_id, admission.get("applicant_name", ""))
-        if not bed:
-            return None
         actual_date = admission_date or now[:10]
+        patient_name = admission.get("applicant_name", "")
+
+        # 原子事务：床位分配 + 入住状态更新
         with self._lock, self._connect() as conn:
             conn.execute("BEGIN IMMEDIATE")
+            # 1. 释放该患者之前占用的床位
+            conn.execute(
+                "UPDATE beds SET status='available', patient_id='', patient_name='', assigned_at='', updated_at=? "
+                "WHERE patient_id = ?",
+                (now, patient_id),
+            )
+            # 2. 分配目标床位（仅当 available/reserved）
+            cur = conn.execute(
+                "UPDATE beds SET status='occupied', patient_id=?, patient_name=?, assigned_at=?, updated_at=? "
+                "WHERE bed_id = ? AND status IN ('available', 'reserved')",
+                (patient_id, patient_name, now, now, bed_id),
+            )
+            if cur.rowcount == 0:
+                conn.execute("ROLLBACK")
+                return None  # 床位不可用
+            # 获取床位号
+            bed_row = conn.execute("SELECT bed_number FROM beds WHERE bed_id = ?", (bed_id,)).fetchone()
+            bed_number = bed_row["bed_number"] if bed_row else ""
+            # 3. 更新入住状态
             conn.execute(
                 "UPDATE admissions SET status='active', patient_id=?, bed_id=?, bed_number=?, "
                 "care_level_key=?, actual_admission_date=?, updated_at=? WHERE admission_id=?",
-                (patient_id, bed_id, bed.get("bed_number", ""),
-                 care_level_key, actual_date, now, admission_id),
+                (patient_id, bed_id, bed_number, care_level_key, actual_date, now, admission_id),
             )
             self._add_timeline(conn, admission_id, "办理入住",
-                               operator, f"床位={bed.get('bed_number', '')}, 等级={care_level_key}")
+                               operator, f"床位={bed_number}, 等级={care_level_key}")
             conn.execute("COMMIT")
-        # 分配护理等级
+
+        # 分配护理等级（非关键路径，失败不阻断）
         if care_level_key:
             try:
                 self.assign_care_level(patient_id, care_level_key,
@@ -1021,18 +1059,32 @@ class CareStore:
                 pass  # 等级不存在时不阻断入住
         return self.get_admission(admission_id)
 
-    # ── 离院 ──
+    # ── 离院（原子操作：状态更新 + 床位释放 + 财务数据在同一事务内） ──
     def discharge(self, admission_id: str, data: dict, operator: str = "") -> Optional[dict]:
         now = self._now()
         admission = self.get_admission(admission_id)
         if not admission:
             return None
+        bed_id = admission.get("bed_id") or ""
+        discharge_date = data.get("discharge_date") or now[:10]
         with self._lock, self._connect() as conn:
             conn.execute("BEGIN IMMEDIATE")
+            # 1. 更新入住状态 + 持久化离院财务数据
             conn.execute(
-                "UPDATE admissions SET status='discharged', updated_at=? WHERE admission_id=?",
-                (now, admission_id),
+                "UPDATE admissions SET status='discharged', discharge_date=?, discharge_reason=?, "
+                "settlement_amount=?, refund_amount=?, updated_at=? WHERE admission_id=?",
+                (discharge_date, data.get("discharge_reason") or "",
+                 data.get("settlement_amount"), data.get("refund_amount"),
+                 now, admission_id),
             )
+            # 2. 在同一事务内释放床位
+            if bed_id:
+                conn.execute(
+                    "UPDATE beds SET status='available', patient_id='', patient_name='', "
+                    "assigned_at='', updated_at=? WHERE bed_id = ?",
+                    (now, bed_id),
+                )
+            # 3. 时间线
             detail_parts = []
             if data.get("discharge_reason"):
                 detail_parts.append(f"原因={data['discharge_reason']}")
@@ -1043,9 +1095,6 @@ class CareStore:
             self._add_timeline(conn, admission_id, "办理离院",
                                operator, "; ".join(detail_parts) or "正常离院")
             conn.execute("COMMIT")
-        # 释放床位
-        if admission.get("bed_id"):
-            self.release_bed(admission["bed_id"])
         return self.get_admission(admission_id)
 
     # ── 时间线 ──
