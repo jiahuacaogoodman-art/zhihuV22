@@ -1274,6 +1274,7 @@ function renderRecs(list){
         ${p.diet_restriction ? `<span class="chip chip-amber">${esc(p.diet_restriction)}</span>` : ''}
       </div>
       <div class="patient-actions">
+        <button class="btn btn-ghost btn-icon" title="查看详情" onclick="viewPatient('${esc(p.patient_id)}')"><span class="icon-s" data-icon="eye"></span></button>
         <button class="btn btn-ghost btn-icon" title="编辑" onclick="openEdit('${esc(p.patient_id)}')"><span class="icon-s" data-icon="edit"></span></button>
         <button class="btn btn-ghost btn-icon" title="删除" onclick="delPt('${esc(p.patient_id)}','${esc(p.name)}')"><span class="icon-s" data-icon="trash"></span></button>
       </div>
@@ -1308,6 +1309,61 @@ async function delPt(pid, name){
     addHist('delete', `删除档案：${name}（${pid}）`);
     loadPatients();
   }catch(e){ toast(e.message, 'error'); }
+}
+
+/* ═══════════ 查看详情 + 导出 ═══════════ */
+async function viewPatient(pid){
+  try{
+    const r = await fetch(`/api/ehr/patients/${encodeURIComponent(pid)}`, {headers: authHeadersRaw()});
+    if(!r.ok) throw new Error(await describeHttpError(r, '获取档案失败'));
+    const p = await r.json();
+    const fieldMap = [
+      ['patient_id','编号'], ['name','姓名'], ['gender','性别'], ['age','年龄'],
+      ['birth_date','出生日期'], ['id_card','身份证号'], ['bed_number','床位号'],
+      ['care_level','护理级别'], ['primary_nurse','责任护士'], ['blood_type','血型'],
+      ['height_cm','身高(cm)'], ['weight_kg','体重(kg)'],
+      ['medical_history','既往病史'], ['allergy','过敏史'], ['diet_restriction','饮食禁忌'],
+      ['emergency_contact','紧急联系人'], ['emergency_phone','联系电话'], ['emergency_relation','与老人关系'],
+      ['admission_date','入院日期'], ['notes','备注']
+    ];
+    const rows = fieldMap.map(([k, label]) => {
+      const v = p[k];
+      const display = (v == null || v === '') ? '—' : esc(String(v));
+      return `<tr><td style="font-weight:600;white-space:nowrap;padding:6px 12px 6px 0;color:var(--ink-2)">${label}</td><td style="padding:6px 0;word-break:break-all">${display}</td></tr>`;
+    }).join('');
+    const html = `
+      <div style="max-height:60vh;overflow-y:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:var(--fz-sm)">${rows}</table>
+      </div>
+      <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn btn-outline btn-sm" onclick="exportPatientJSON('${esc(pid)}')"><span class="icon-s" data-icon="download"></span>导出 JSON</button>
+        <button class="btn btn-outline btn-sm" onclick="exportPatientCSV('${esc(pid)}')"><span class="icon-s" data-icon="download"></span>导出 CSV</button>
+      </div>`;
+    await window.ZhDialog.alert({ title: `${p.name || pid} 的完整档案`, html, wide: true });
+  }catch(e){ toast(e.message,'error'); }
+}
+function exportPatientJSON(pid){
+  const p = allPts.find(x => x.patient_id === pid);
+  if(!p){ toast('未找到该档案','error'); return; }
+  const blob = new Blob([JSON.stringify(p, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `档案_${p.name||pid}_${pid}.json`;
+  a.click(); URL.revokeObjectURL(a.href);
+}
+function exportPatientCSV(pid){
+  const p = allPts.find(x => x.patient_id === pid);
+  if(!p){ toast('未找到该档案','error'); return; }
+  const keys = Object.keys(p);
+  const csvContent = '\uFEFF' + keys.join(',') + '\n' + keys.map(k => {
+    const v = p[k]==null ? '' : String(p[k]).replace(/"/g,'""');
+    return `"${v}"`;
+  }).join(',');
+  const blob = new Blob([csvContent], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `档案_${p.name||pid}_${pid}.csv`;
+  a.click(); URL.revokeObjectURL(a.href);
 }
 
 /* ═══════════ 编辑 ═══════════ */

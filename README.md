@@ -177,6 +177,9 @@ cp .env.example .env
 # 编辑 .env，设置 AUTH_TOKEN 和 PII_ENCRYPTION_KEY（见下方配置说明）
 
 # 6. 启动
+#    main.py 会通过 python-dotenv 自动加载项目根目录下的 .env，
+#    所以裸机直接 uvicorn 启动也能读到 AUTH_TOKEN / PII_ENCRYPTION_KEY 等。
+#    （已显式 export 的环境变量优先于 .env，systemd / docker 注入永远赢。）
 uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
@@ -290,10 +293,10 @@ EMBEDDING_ALLOW_DEGRADED=true
 #### 7. 启动
 
 ```powershell
-# 用项目内置脚本
+# 用项目内置脚本（推荐：会自动把 .env 注入到当前进程）
 .\scripts\run.ps1
 
-# 或者直接调
+# 或者直接调（main.py 也会通过 python-dotenv 自动加载 .env）
 uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
@@ -384,7 +387,8 @@ ollama list | grep huatuo_o1_7b
 # 举例：用 4B 的 Qwen 2.5 顶上
 ollama pull qwen2.5:3b
 
-# 写进 .env（优先级高于 app/core/config.py 默认值）
+# 写进 .env（如果 .env 里已经有 OLLAMA_MODEL_NAME=... 这一行，
+# 请直接编辑那一行，不要追加，否则会出现重复 key）
 echo 'OLLAMA_MODEL_NAME=qwen2.5:3b' >> .env
 ```
 
@@ -472,9 +476,17 @@ curl -s http://localhost:8000/health
 
 ```bash
 # 生成随机 token 写入 .env
-echo "AUTH_TOKEN=$(openssl rand -hex 32)" >> .env
+# 注意：.env.example 里已经有空的 AUTH_TOKEN= 行，简单 echo >> 会出现重复 key。
+# 用 sed 做"存在则替换、不存在则追加"的写法：
+TOKEN=$(openssl rand -hex 32)
+if grep -q '^AUTH_TOKEN=' .env 2>/dev/null; then
+  sed -i.bak "s|^AUTH_TOKEN=.*|AUTH_TOKEN=$TOKEN|" .env && rm -f .env.bak
+else
+  echo "AUTH_TOKEN=$TOKEN" >> .env
+fi
 
 # 启动服务 → admin 用户自动创建，AUTH_TOKEN 成为其 API Key
+# main.py 通过 python-dotenv 自动加载 .env，无需手动 source
 uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
@@ -825,11 +837,28 @@ powershell -ExecutionPolicy Bypass -File .\scripts\setup.ps1
 cp .env.example .env
 
 # 2. 在 .env 里填两个必填项
-echo "AUTH_TOKEN=$(openssl rand -hex 32)" >> .env
-echo "PII_ENCRYPTION_KEY=$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')" >> .env
+#    注意：.env.example 里 AUTH_TOKEN= 和 PII_ENCRYPTION_KEY= 已经存在（值为空），
+#    直接 `echo ... >> .env` 会出现重复 key（多数解析器以最后一个为准，但容易让人误判）。
+#    用下面的 sed/python 写法做"key 存在则替换、不存在才追加"：
+AUTH_TOKEN=$(openssl rand -hex 32)
+PII_KEY=$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')
+python - <<EOF
+from pathlib import Path, PurePath
+import os, re
+p = Path('.env'); txt = p.read_text() if p.exists() else ''
+def upsert(t, k, v):
+    pat = re.compile(rf'^{k}=.*$', re.M)
+    return pat.sub(f'{k}={v}', t) if pat.search(t) else (t.rstrip()+f'\n{k}={v}\n')
+txt = upsert(txt, 'AUTH_TOKEN',         os.environ['AUTH_TOKEN'])
+txt = upsert(txt, 'PII_ENCRYPTION_KEY', os.environ['PII_KEY'])
+p.write_text(txt)
+EOF
 
 # 3. 启动（首次会从 HuggingFace 下载 HuatuoGPT-o1-7B GGUF，约 4.8 GB）
-docker compose up -d
+#    ⚠️ 注意：ollama 和 model-puller 在 docker-compose.yml 里挂在 profiles: ["ollama"] 下，
+#    不加 --profile ollama 这两个容器**不会启动**，model-puller 也就不会拉模型。
+#    远程 LLM API（LLM_PROVIDER=openai）的部署不需要本地 ollama，可省略 --profile。
+docker compose --profile ollama up -d
 
 # 4. 看日志确认模型拉完
 docker compose logs -f model-puller   # 看到 "[model-puller] done." 就是好了
@@ -863,7 +892,7 @@ OLLAMA_MODEL_NAME=qwen2.5:7b
 **有 NVIDIA GPU？** 加一个 overlay：
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+docker compose --profile ollama -f docker-compose.yml -f docker-compose.gpu.yml up -d
 docker exec yinban-ollama nvidia-smi   # 确认 GPU 可见
 ```
 

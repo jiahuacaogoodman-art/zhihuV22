@@ -13,13 +13,16 @@
 #   2) 编辑 .env，至少把 AUTH_TOKEN 和 PII_ENCRYPTION_KEY 填上：
 #        AUTH_TOKEN=$(openssl rand -hex 32)
 #        PII_ENCRYPTION_KEY=$(python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
-#   3) docker compose up -d
+#   3) docker compose --profile ollama up -d
+#      ⚠️ ollama 和 model-puller 都挂在 profiles: ["ollama"] 下，
+#      不加 `--profile ollama` 这两个容器不会启动，model-puller 也就不会拉模型。
+#      使用远程 LLM API（LLM_PROVIDER=openai）的部署可省略此 flag。
 #      首次启动 model-puller 会从 HuggingFace 下载约 4.8 GB（Q4_K_M 量化），耐心等待。
 #      First run downloads ~4.8 GB from HuggingFace; please be patient.
 #   4) 访问 http://localhost:8000  (admin token = $AUTH_TOKEN)
 #
 # GPU 用户额外加 GPU overlay：
-#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+#   docker compose --profile ollama -f docker-compose.yml -f docker-compose.gpu.yml up -d
 # ============================================================
 
 services:

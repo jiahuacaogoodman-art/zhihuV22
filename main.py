@@ -7,6 +7,33 @@
 """
 
 import os
+from pathlib import Path
+
+# ----------------------------------------------------------------
+# .env 自动加载（必须在 `from app.core.config import ...` 之前）
+# ----------------------------------------------------------------
+# 部署场景里有两类用户会被坑：
+#   1) 裸机 `uvicorn main:app ...`：systemd / docker 之外没人帮忙注入 .env，
+#      AUTH_TOKEN / PII_ENCRYPTION_KEY / OLLAMA_MODEL_NAME 等就会全部读不到。
+#   2) Windows 的 scripts\run.ps1：之前只检查 .env 是否存在，没真正加载。
+# python-dotenv 已经在 requirements.txt 里，这里显式调用一次即可全部修好。
+#
+# 行为约束：
+#   - override=False  环境变量优先于 .env（systemd/docker 的注入永远赢）
+#   - 找不到 .env 不报错（生产里通常不放 .env，靠运行时注入）
+#   - 即便 python-dotenv 缺失也不要因此让进程起不来，只打个 warning
+try:
+    from dotenv import load_dotenv
+
+    _env_file = Path(__file__).resolve().parent / ".env"
+    if _env_file.is_file():
+        load_dotenv(dotenv_path=_env_file, override=False)
+except Exception as _e:  # pragma: no cover - 仅在 python-dotenv 缺失时触发
+    import logging
+    logging.getLogger(__name__).warning(
+        f"未能加载 .env 文件（python-dotenv 可能未安装）：{_e}"
+    )
+
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -17,7 +44,6 @@ from contextlib import asynccontextmanager
 import chromadb
 from sentence_transformers import SentenceTransformer
 from loguru import logger
-from pathlib import Path
 
 from app.core.config import (
     CHROMA_DB_PATH,
