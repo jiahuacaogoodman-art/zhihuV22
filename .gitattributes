@@ -1,0 +1,72 @@
+# ============================================================
+# 行尾规范 / Line ending normalization
+#
+# 关键问题：Windows 默认 git config core.autocrlf=true 会把所有文本
+# 文件的换行从 LF 转成 CRLF。被 docker build 复制进 Linux 容器后，
+# /bin/sh 看到 CRLF 会报：
+#   /bin/sh: 1: <command>: not found
+# 或更隐晦地把脚本第一行变成 "#!/usr/bin/env bash\r"，shebang 失效。
+#
+# 这里强制下面这些文件无论在哪个平台 checkout 都保持 LF。
+# ============================================================
+
+# 默认：自动判断
+* text=auto eol=lf
+
+# Shell 脚本、Dockerfile、容器内执行的所有文件强制 LF
+*.sh        text eol=lf
+Dockerfile  text eol=lf
+*.dockerfile text eol=lf
+docker-compose*.yml text eol=lf
+docker-compose*.yaml text eol=lf
+
+# 配置文件强制 LF（YAML/TOML/INI）
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.toml      text eol=lf
+*.ini       text eol=lf
+*.cfg       text eol=lf
+*.conf      text eol=lf
+
+# Python / 后端代码强制 LF（容器内执行）
+*.py        text eol=lf
+requirements*.txt text eol=lf
+pytest.ini  text eol=lf
+
+# .env 模板强制 LF（容器内被 docker compose 读取）
+.env*       text eol=lf
+.gitignore  text eol=lf
+.gitattributes text eol=lf
+
+# 前端代码 LF（一致性）
+*.js        text eol=lf
+*.css       text eol=lf
+*.html      text eol=lf
+*.json      text eol=lf
+*.svg       text eol=lf
+
+# Markdown 文档 LF
+*.md        text eol=lf
+
+# Windows 专用脚本保留 CRLF（Windows 工具更友好）
+*.ps1       text eol=crlf
+*.psm1      text eol=crlf
+*.psd1      text eol=crlf
+*.bat       text eol=crlf
+*.cmd       text eol=crlf
+
+# 二进制文件不动
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.webp      binary
+*.ico       binary
+*.gguf      binary
+*.onnx      binary
+*.pt        binary
+*.pth       binary
+*.bin       binary
+*.tgz       binary
+*.tar.gz    binary
+*.zip       binary

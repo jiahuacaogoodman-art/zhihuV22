@@ -77,9 +77,11 @@
 
 ## 🚀 快速开始
 
-### 一键部署（推荐，3 行搞定）
+### 一键部署（按系统选一种，3 行搞定）
 
-只需要装了 Docker，其余全自动——密钥生成、模型下载、GPU 检测、服务启动：
+只需要装了 Docker，其余全自动——密钥生成、模型下载、GPU 检测、服务启动。
+
+#### 🐧 Linux / 🍎 macOS
 
 ```bash
 git clone https://github.com/jiahuacaogoodman-art/Zhihu-Yinban.git
@@ -87,7 +89,20 @@ cd Zhihu-Yinban
 chmod +x scripts/setup.sh && ./scripts/setup.sh
 ```
 
-跟着向导按回车，约 10 分钟后看到 `🎉 部署成功！` + 管理员 Token，打开浏览器即可使用。
+#### 🪟 Windows（PowerShell，无需 WSL）
+
+```powershell
+git clone https://github.com/jiahuacaogoodman-art/Zhihu-Yinban.git
+cd Zhihu-Yinban
+powershell -ExecutionPolicy Bypass -File .\scripts\setup.ps1
+```
+
+> Windows 用户首次运行可能需要：
+> 1. **没装 Docker？** 脚本会自动调用 `winget install Docker.DockerDesktop`
+> 2. **PowerShell 执行被拦？** 直接用上面的 `-ExecutionPolicy Bypass` 一次性绕过
+> 3. **想先体检一下环境？** 运行 `.\scripts\preflight.ps1`，会逐项告诉你哪里需要修
+
+跟着向导按回车，约 10 分钟后看到 `部署成功！` + 管理员 Token，打开浏览器即可使用。
 
 | 页面 | 地址 |
 |---|---|
@@ -99,22 +114,34 @@ chmod +x scripts/setup.sh && ./scripts/setup.sh
 
 ### 🇨🇳 国内网络部署（无梯子，3 行搞定）
 
+#### 🐧 Linux / 🍎 macOS
+
 ```bash
 git clone https://gitee.com/jiahuacaogoodman-art/Zhihu-Yinban.git
 cd Zhihu-Yinban
 chmod +x scripts/setup-cn.sh && ./scripts/setup-cn.sh
 ```
 
+#### 🪟 Windows
+
+```powershell
+git clone https://gitee.com/jiahuacaogoodman-art/Zhihu-Yinban.git
+cd Zhihu-Yinban
+powershell -ExecutionPolicy Bypass -File .\scripts\setup-cn.ps1
+```
+
 全自动：Gitee 克隆 + 清华 APT 镜像 + hf-mirror.com + 生成密钥 + 启动服务。LLM 后端自由选择——本地 Ollama 或远程 API（DeepSeek / 智谱 / vLLM），编辑 `.env` 中 `LLM_PROVIDER` 即可切换。
 
-> **Docker Hub 慢？** Docker Desktop 设置加 `{"registry-mirrors":["https://docker.mirrors.ustc.edu.cn"]}`，重启后重跑。
+> **Docker Hub 慢？**
+> - Linux: 编辑 `/etc/docker/daemon.json` 加 `{"registry-mirrors":["https://docker.mirrors.ustc.edu.cn"]}`
+> - Windows/Mac: Docker Desktop → Settings → Docker Engine → 同上 JSON → Apply & Restart
 
 ---
 
 ### 手动安装（开发者 / 不用 Docker）
 
 <details>
-<summary>展开手动安装步骤</summary>
+<summary>展开手动安装步骤（Linux / macOS）</summary>
 
 #### 环境要求
 
@@ -138,8 +165,8 @@ pip install -r requirements.txt
 
 # 3. 本地大模型：安装 Ollama + 拉 HuatuoGPT-o1-7B（详见下方【本地大模型配置】）
 curl -fsSL https://ollama.com/install.sh | sh
-# ⚠️ 不能直接 `ollama pull huatuo_o1_7b` —— 这个名字是本项目的本地别名，
-#    官方 Registry 没有这一条。具体怎么拿到权重，请看下一节。
+# 不能直接 `ollama pull huatuo_o1_7b` —— 这个名字是本项目的本地别名，
+# 官方 Registry 没有这一条。具体怎么拿到权重，请看下一节。
 
 # 4. OCR（Ubuntu，二选一或都装）
 sudo apt install -y tesseract-ocr tesseract-ocr-chi-sim
@@ -154,6 +181,136 @@ uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
 > 首次启动会下载 `bge-small-zh-v1.5`（约 100MB）到 `~/.cache/torch/sentence_transformers/`，下载一次后即可完全断网运行。
+
+</details>
+
+<details>
+<summary>展开手动安装步骤（Windows，不用 Docker）</summary>
+
+#### 1. 装 Python（>=3.10）
+
+```powershell
+# 推荐用 winget（Win10 1809+ 内置）
+winget install -e --id Python.Python.3.12
+
+# 验证
+python --version
+```
+
+或从官网下载：https://www.python.org/downloads/windows/ —— 安装时**务必勾上 "Add Python to PATH"**。
+
+#### 2. 装 Tesseract OCR（含中文语言包）
+
+```powershell
+# 推荐 winget
+winget install -e --id UB-Mannheim.TesseractOCR
+# 默认装到 C:\Program Files\Tesseract-OCR
+
+# 添加到 PATH（管理员 PowerShell）
+[Environment]::SetEnvironmentVariable(
+    'PATH',
+    [Environment]::GetEnvironmentVariable('PATH', 'Machine') + ';C:\Program Files\Tesseract-OCR',
+    'Machine'
+)
+# 重开 PowerShell 后验证
+tesseract --version
+tesseract --list-langs   # 应包含 chi_sim
+```
+
+如果 `--list-langs` 没看到 `chi_sim`，去 [tessdata_fast](https://github.com/tesseract-ocr/tessdata_fast) 下载 `chi_sim.traineddata`，丢进 `C:\Program Files\Tesseract-OCR\tessdata\`。
+
+#### 3. 装 Ollama for Windows
+
+```powershell
+winget install -e --id Ollama.Ollama
+# 或下载安装器：https://ollama.com/download/windows
+```
+
+装完默认会注册成 Windows 服务自动启动，监听 `http://localhost:11434`。
+
+#### 4. 克隆项目 + 装依赖
+
+```powershell
+git clone https://github.com/jiahuacaogoodman-art/Zhihu-Yinban.git
+cd Zhihu-Yinban
+
+# 创建虚拟环境
+python -m venv venv
+
+# 激活（PowerShell）
+.\venv\Scripts\Activate.ps1
+# 如果报错 "无法加载文件...因为在此系统上禁止运行脚本"，临时绕过：
+#   Set-ExecutionPolicy -Scope Process Bypass
+
+# 装依赖
+pip install -r requirements.txt
+```
+
+#### 5. 拉 HuatuoGPT-o1-7B 模型
+
+```powershell
+# 方式 A：从 Ollama 社区直拉（最快）
+ollama pull cliu/HuatuoGPT-o1-7B:latest
+ollama cp cliu/HuatuoGPT-o1-7B:latest huatuo_o1_7b
+ollama list   # 确认 huatuo_o1_7b:latest 出现
+```
+
+#### 6. 配置 .env
+
+```powershell
+# 复制模板
+Copy-Item .env.example .env
+
+# 用 notepad 打开
+notepad .env
+```
+
+或者直接用 PowerShell 一行生成两个密钥写进去：
+
+```powershell
+$bytes = New-Object byte[] 32
+[System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+$authToken = ($bytes | %{ '{0:x2}' -f $_ }) -join ''
+
+$bytes2 = New-Object byte[] 32
+[System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes2)
+$piiKey = [Convert]::ToBase64String($bytes2).Replace('+','-').Replace('/','_')
+
+@"
+AUTH_TOKEN=$authToken
+PII_ENCRYPTION_KEY=$piiKey
+HOST=0.0.0.0
+PORT=8000
+EMBEDDING_ALLOW_DEGRADED=true
+"@ | Set-Content -Path .env -Encoding UTF8
+```
+
+> 国内网络追加一行 `HF_ENDPOINT=https://hf-mirror.com` 加速首次 embedding 模型下载。
+
+#### 7. 启动
+
+```powershell
+# 用项目内置脚本
+.\scripts\run.ps1
+
+# 或者直接调
+uvicorn main:app --host 0.0.0.0 --port 8000
+```
+
+打开 http://localhost:8000/ 即可。
+
+#### Windows 常见坑速查
+
+| 现象 | 原因 | 解决 |
+|---|---|---|
+| `Activate.ps1 不能被加载` | 执行策略 Restricted | `Set-ExecutionPolicy -Scope Process Bypass` |
+| `pip install` 卡 numpy/torch | PyPI 太慢 | `pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple` |
+| Tesseract 报 `chi_sim.traineddata 不存在` | 中文包没装 | 下 traineddata 丢进 `Tesseract-OCR\tessdata\` |
+| OCR 总是失败 | 路径含中文/空格 | 把项目放到 `C:\code\` 等纯 ASCII 路径 |
+| `~/.cache/torch/...` 路径过长 | Windows 260 字符限制 | 启用长路径：管理员 PowerShell `Set-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' LongPathsEnabled 1` |
+| 端口 8000 不通 | Windows Defender 阻止 | 首次启动时弹窗点 "允许访问"；或预先开规则：`New-NetFirewallRule -DisplayName 'ZhihuYinban' -LocalPort 8000 -Protocol TCP -Direction Inbound -Action Allow` |
+| 端口 8000 显示被占用但没进程 | Hyper-V 保留端口段 | 管理员：`net stop winnat` → `netsh int ipv4 add excludedportrange protocol=tcp startport=8000 numberofports=1` → `net start winnat` |
+| 首次访问 8000 浏览器不弹窗就连不上 | Defender 安静拦截 | 同上手动加防火墙规则 |
 
 </details>
 
@@ -625,26 +782,35 @@ curl "http://localhost:8000/api/ehr/audit?patient_id=p001&limit=20" \
 
 ## 🏭 生产部署
 
-### 方式 0：一键部署向导（最推荐 ⭐⭐⭐）
+### 方式 0：一键部署向导（最推荐）
 
 什么都不用手动配 —— 脚本自动检测环境、生成密钥、选模型、拉起 Docker：
 
 ```bash
+# Linux / macOS
 git clone https://github.com/jiahuacaogoodman-art/Zhihu-Yinban.git
 cd Zhihu-Yinban
 chmod +x scripts/setup.sh
 ./scripts/setup.sh
 ```
 
+```powershell
+# Windows
+git clone https://github.com/jiahuacaogoodman-art/Zhihu-Yinban.git
+cd Zhihu-Yinban
+powershell -ExecutionPolicy Bypass -File .\scripts\setup.ps1
+```
+
 向导会依次：
-1. 检测 Docker / Docker Compose / NVIDIA GPU
-2. 自动生成 AUTH_TOKEN + PII_ENCRYPTION_KEY（或让你粘贴已有的）
-3. 让你选 LLM 后端：本地 Ollama 或远程 GPU API
-4. 让你选模型量化档位（Q3/Q4/Q5/Q8/自定义）
-5. 写入 `.env`
-6. `docker compose up -d`
-7. 等模型下载 + 等后端 healthy
-8. **弹出访问地址 + 管理员 Token**
+1. **(Windows)** 调用 `preflight.ps1` 检测 PowerShell / Docker / WSL2 backend / GPU / 端口占用 / Hyper-V 保留端口段 / 长路径支持 / 内存 / 防火墙
+2. **(Linux/macOS)** 检测 Docker / Compose / NVIDIA GPU
+3. 自动生成 AUTH_TOKEN + PII_ENCRYPTION_KEY（不依赖 openssl/python，PowerShell 用 .NET 原生 `RandomNumberGenerator`）
+4. 让你选 LLM 后端：本地 Ollama 或远程 GPU API
+5. 让你选模型量化档位（Q3/Q4/Q5/Q8/自定义）
+6. 写入 `.env`（UTF-8 NoBOM + LF，避免容器内读取异常）
+7. `docker compose up -d`
+8. 等模型下载 + 等后端 healthy
+9. **弹出访问地址 + 管理员 Token + 防火墙开放命令**
 
 全程按回车就行，约 10 分钟搞定（首次下载模型取决于网速）。
 
@@ -764,7 +930,7 @@ docker run -d --name yinban \
 
 ---
 
-### 方式 C：systemd（裸机部署）
+### 方式 C：systemd（Linux 裸机部署）
 
 ```ini
 [Unit]
@@ -789,9 +955,41 @@ sudo systemctl enable --now zhihuyinban
 journalctl -u zhihuyinban -f
 ```
 
-### 数据备份（裸机部署）
+### 方式 D：Windows 计划任务（开机自启，systemd 的 Windows 等价物）
 
-**务必每日备份以下目录**：
+Windows 上不需要装第三方工具（NSSM / WinSW），直接用项目脚本：
+
+```powershell
+# 管理员 PowerShell
+.\scripts\install-service.ps1
+
+# 触发条件可选：
+#   -Trigger AtLogon    （默认，用户登录时启动 - 推荐，能用到 Docker Desktop）
+#   -Trigger AtStartup  （系统启动后 60 秒，需要 Docker Desktop 配置成 SYSTEM 启动）
+```
+
+它会创建一个 Windows 计划任务（Scheduled Task），开机/登录时自动 `docker compose up -d`，
+日志写入 `service.log`。
+
+```powershell
+# 立即测试
+Start-ScheduledTask -TaskName ZhihuYinban
+
+# 查看状态
+Get-ScheduledTask -TaskName ZhihuYinban | Get-ScheduledTaskInfo
+
+# 查看日志
+Get-Content service.log -Tail 50
+
+# 卸载
+.\scripts\uninstall-service.ps1
+```
+
+### 数据备份
+
+#### Linux / macOS
+
+**务必每日备份以下目录**（裸机部署）：
 - `local_ehr_db/` — 全部向量数据
 - `local_auth/` — 用户身份
 - `local_audit_log/` — 审计留痕
@@ -803,6 +1001,31 @@ tar czf backup-$(date +%F).tgz \
   local_ehr_db/ local_auth/ local_audit_log/ \
   local_ehr_uploads/ local_nursing_events/
 ```
+
+Docker 部署的备份命令见上方"方式 A"。
+
+#### Windows
+
+```powershell
+# 一键备份所有 Docker 卷（输出 backups\yinban-backup-YYYY-MM-DD_HHMMSS.tgz）
+.\scripts\backup.ps1
+
+# 自定义输出目录
+.\scripts\backup.ps1 -OutDir D:\Backups
+```
+
+#### 计划任务自动每日备份（Windows）
+
+```powershell
+# 管理员 PowerShell
+$action = New-ScheduledTaskAction -Execute 'powershell.exe' `
+    -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$PWD\scripts\backup.ps1`" -OutDir D:\Backups"
+$trigger = New-ScheduledTaskTrigger -Daily -At 3am
+Register-ScheduledTask -TaskName 'ZhihuYinbanBackup' `
+    -Action $action -Trigger $trigger -RunLevel Highest
+```
+
+每天凌晨 3 点自动备份到 `D:\Backups\`。建议把这个目录再同步到云盘 / NAS。
 
 ---
 
