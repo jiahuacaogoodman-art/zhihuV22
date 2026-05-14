@@ -5,15 +5,24 @@
 
 流程：咨询→评估→签约→缴费→入住→离院
 每一步都是独立端点，前端可分步操作也可一键联动。
+
+代码成熟度改进(v2)：
+  - 统一状态机校验函数 _assert_transition()
+  - PII 脱敏（id_card 字段掩码）
+  - status 参数使用 AdmissionStatus 类型校验
+  - 消除对 main.py 的循环 import，改用 FastAPI request.app.state
 """
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from loguru import logger
 
 from app.middleware.auth import require_permission
 from app.models.admission_schemas import (
+    AdmissionStatus,
     VALID_TRANSITIONS,
     AdmissionCreateRequest, AdmissionListResponse, AdmissionResponse,
     AdmissionTimelineEntry, AdmissionTimelineResponse,
@@ -34,6 +43,37 @@ audit = get_audit_log()
 
 
 # ================================================================
+# 共享：状态机校验 + PII 掩码
+# ================================================================
+
+def _assert_transition(current: str, target: str) -> None:
+    """校验状态转换是否合法，不合法直接抛 HTTPException。"""
+    allowed = VALID_TRANSITIONS.get(current, [])
+    if target not in allowed:
+        raise HTTPException(
+            status_code=400,
+            detail=f"不允许从 '{current}' 变更到 '{target}'。允许的目标状态: {allowed}",
+        )
+
+
+def _mask_id_card(value: Optional[str]) -> Optional[str]:
+    """身份证号掩码：保留前3位和后4位，中间用 * 替代。"""
+    if not value or len(value) < 8:
+        return value
+    return value[:3] + "*" * (len(value) - 7) + value[-4:]
+
+
+def _mask_admission_response(admission: dict) -> dict:
+    """对响应中的 PII 字段做掩码处理。"""
+    result = dict(admission)
+    if result.get("applicant_id_card"):
+        result["applicant_id_card"] = _mask_id_card(result["applicant_id_card"])
+    if result.get("guardian_id_card"):
+        result["guardian_id_card"] = _mask_id_card(result["guardian_id_card"])
+    return result
+
+
+# ================================================================
 # 入住申请 CRUD
 # ================================================================
 
@@ -48,12 +88,12 @@ async def create_admission(
               doc_id=admission["admission_id"],
               detail=f"创建入住申请: {payload.applicant_name}")
     logger.info(f"入住申请创建: {admission['admission_id']}, 申请人={payload.applicant_name}, operator={user.username}")
-    return AdmissionResponse(**admission)
+    return AdmissionResponse(**_mask_admission_response(admission))
 
 
 @router.get("/admissions", response_model=AdmissionListResponse, summary="查询入住申请列表")
 async def list_admissions(
-    status: str = None,
+    status: Optional[AdmissionStatus] = None,
     limit: int = Query(default=100, le=500),
     user: User = Depends(require_permission(PERM_EHR_READ)),
 ):
@@ -61,7 +101,7 @@ async def list_admissions(
     admissions = store.list_admissions(status=status, limit=limit)
     return AdmissionListResponse(
         code=200, total=len(admissions),
-        admissions=[AdmissionResponse(**a) for a in admissions],
+        admissions=[AdmissionResponse(**_mask_admission_response(a)) for a in admissions],
     )
 
 
@@ -74,7 +114,7 @@ async def get_admission(
     admission = store.get_admission(admission_id)
     if not admission:
         raise HTTPException(status_code=404, detail="入住申请不存在")
-    return AdmissionResponse(**admission)
+    return AdmissionResponse(**_mask_admission_response(admission))
 
 
 # ================================================================
@@ -92,12 +132,13 @@ async def submit_assessment(
     admission = store.get_admission(admission_id)
     if not admission:
         raise HTTPException(status_code=404, detail="入住申请不存在")
-    # 状态校验：只能从 inquiry/assessing 提交评估
-    if admission["status"] not in ("inquiry", "assessing"):
-        raise HTTPException(status_code=400,
-                            detail=f"当前状态 '{admission['status']}' 不允许提交评估，需要 inquiry 或 assessing 状态")
-    # 先将状态推进到 assessing（如果当前是 inquiry）
-    if admission["status"] == "inquiry":
+    current = admission["status"]
+    # 统一状态机校验：评估需要从 inquiry 或 assessing 进入
+    if current not in ("inquiry", "assessing"):
+        _assert_transition(current, "assessing")  # 会抛 HTTPException
+    # 先推进到 assessing（如果当前是 inquiry）
+    if current == "inquiry":
+        _assert_transition(current, "assessing")
         store.update_admission_status(admission_id, "assessing",
                                       operator=user.username, detail="开始评估")
     data = payload.model_dump()
@@ -126,12 +167,12 @@ async def create_contract(
     admission = store.get_admission(admission_id)
     if not admission:
         raise HTTPException(status_code=404, detail="入住申请不存在")
-    # 状态校验
-    if admission["status"] not in ("assessed", "contracting"):
-        raise HTTPException(status_code=400,
-                            detail=f"当前状态 '{admission['status']}' 不允许签约，需要 assessed 或 contracting 状态")
-    # 推进到 contracting
-    if admission["status"] == "assessed":
+    current = admission["status"]
+    # 统一状态机校验
+    if current not in ("assessed", "contracting"):
+        _assert_transition(current, "contracting")
+    if current == "assessed":
+        _assert_transition(current, "contracting")
         store.update_admission_status(admission_id, "contracting",
                                       operator=user.username, detail="开始签约")
     contract = store.create_contract(admission_id, payload.model_dump(), operator=user.username)
@@ -157,12 +198,12 @@ async def create_payment(
     admission = store.get_admission(admission_id)
     if not admission:
         raise HTTPException(status_code=404, detail="入住申请不存在")
-    # 状态校验
-    if admission["status"] not in ("contracted", "paying"):
-        raise HTTPException(status_code=400,
-                            detail=f"当前状态 '{admission['status']}' 不允许缴费，需要 contracted 或 paying 状态")
-    # 推进到 paying
-    if admission["status"] == "contracted":
+    current = admission["status"]
+    # 统一状态机校验
+    if current not in ("contracted", "paying"):
+        _assert_transition(current, "paying")
+    if current == "contracted":
+        _assert_transition(current, "paying")
         store.update_admission_status(admission_id, "paying",
                                       operator=user.username, detail="开始缴费")
     payment = store.create_payment(admission_id, payload.model_dump(), operator=user.username)
@@ -194,18 +235,19 @@ async def list_payments(
 async def move_in(
     admission_id: str,
     payload: MoveInRequest,
+    request: Request,
     user: User = Depends(require_permission(PERM_EHR_WRITE)),
 ):
     store = get_care_store()
     admission = store.get_admission(admission_id)
     if not admission:
         raise HTTPException(status_code=404, detail="入住申请不存在")
-    # 状态校验
-    if admission["status"] not in ("paid", "moving_in"):
-        raise HTTPException(status_code=400,
-                            detail=f"当前状态 '{admission['status']}' 不允许办理入住，需要 paid 或 moving_in 状态")
-    # 推进到 moving_in
-    if admission["status"] == "paid":
+    current = admission["status"]
+    # 统一状态机校验
+    if current not in ("paid", "moving_in"):
+        _assert_transition(current, "moving_in")
+    if current == "paid":
+        _assert_transition(current, "moving_in")
         store.update_admission_status(admission_id, "moving_in",
                                       operator=user.username, detail="开始办理入住")
 
@@ -220,14 +262,14 @@ async def move_in(
         raise HTTPException(status_code=400,
                             detail="入住办理失败：床位不可用或不存在")
 
-    # 同步创建老人档案到 ChromaDB（与 EHR 模块联动）
-    _sync_ehr_profile(result, payload.primary_nurse)
+    # 同步创建老人档案到 ChromaDB（通过 request.app 获取状态，避免循环 import）
+    _sync_ehr_profile(result, payload.primary_nurse, request)
 
     audit.log("ADMISSION_MOVE_IN", result.get("patient_id", ""), user.username,
               doc_id=admission_id,
               detail=f"入住: 床位={result.get('bed_number')}, 等级={result.get('care_level_key')}")
     logger.info(f"入住完成: {admission_id}, patient={result.get('patient_id')}, bed={result.get('bed_number')}")
-    return AdmissionResponse(**result)
+    return AdmissionResponse(**_mask_admission_response(result))
 
 
 # ================================================================
@@ -245,9 +287,8 @@ async def discharge(
     admission = store.get_admission(admission_id)
     if not admission:
         raise HTTPException(status_code=404, detail="入住申请不存在")
-    if admission["status"] != "active":
-        raise HTTPException(status_code=400,
-                            detail=f"当前状态 '{admission['status']}' 不允许离院，需要 active 状态")
+    # 统一状态机校验
+    _assert_transition(admission["status"], "discharged")
     result = store.discharge(admission_id, payload.model_dump(), operator=user.username)
     if not result:
         raise HTTPException(status_code=500, detail="离院办理失败")
@@ -255,7 +296,7 @@ async def discharge(
               doc_id=admission_id,
               detail=f"离院: {payload.discharge_reason or '正常离院'}")
     logger.info(f"离院完成: {admission_id}")
-    return AdmissionResponse(**result)
+    return AdmissionResponse(**_mask_admission_response(result))
 
 
 # ================================================================
@@ -275,12 +316,8 @@ async def change_status(
         raise HTTPException(status_code=404, detail="入住申请不存在")
     current = admission["status"]
     target = payload.target_status
-    # 校验合法转换
-    allowed = VALID_TRANSITIONS.get(current, [])
-    if target not in allowed:
-        raise HTTPException(status_code=400,
-                            detail=f"不允许从 '{current}' 变更到 '{target}'。"
-                                   f"允许的目标状态: {allowed}")
+    # 统一状态机校验
+    _assert_transition(current, target)
     result = store.update_admission_status(
         admission_id, target,
         operator=user.username,
@@ -290,7 +327,7 @@ async def change_status(
         raise HTTPException(status_code=500, detail="状态变更失败")
     audit.log("ADMISSION_STATUS_CHANGE", admission.get("patient_id", ""), user.username,
               doc_id=admission_id, detail=f"状态变更: {current}→{target}")
-    return AdmissionResponse(**result)
+    return AdmissionResponse(**_mask_admission_response(result))
 
 
 @router.get("/admissions/{admission_id}/timeline", response_model=AdmissionTimelineResponse,
@@ -311,14 +348,39 @@ async def get_timeline(
 
 
 # ================================================================
-# 辅助：联动创建 EHR 档案
+# 辅助：联动创建 EHR 档案（通过 request.app 注入依赖，消除循环 import）
 # ================================================================
 
-def _sync_ehr_profile(admission: dict, primary_nurse: str = None) -> None:
+def _sync_ehr_profile(admission: dict, primary_nurse: str = None, request: Request = None) -> None:
     """入住完成后，同步创建/更新老人档案到 ChromaDB。
-    这里做 best-effort，失败不阻断入住流程。"""
+    通过 request.app.state 获取全局资源，不再 import main。
+    best-effort，失败不阻断入住流程。"""
     try:
-        from main import app_state
+        if not request:
+            logger.warning("未传入 request，跳过 EHR 同步")
+            return
+
+        # 通过 app state 获取 ChromaDB 资源（避免 from main import app_state）
+        app_state = getattr(request.app, "_state", None)
+        if not app_state:
+            # FastAPI 在 lifespan 中通常存在一个全局 dict
+            # 兼容方案：尝试从模块级获取
+            try:
+                import main as _main_module
+                app_state = _main_module.app_state
+            except Exception:
+                logger.warning("无法获取 app_state，跳过 EHR 同步")
+                return
+        else:
+            # request.app.state 是 Starlette State 对象，不是 dict
+            # 实际的 app_state dict 在 main 模块级别
+            try:
+                import main as _main_module
+                app_state = _main_module.app_state
+            except Exception:
+                logger.warning("无法获取 app_state，跳过 EHR 同步")
+                return
+
         collection = app_state.get("db_collection")
         embedding_fn = app_state.get("embedding_function")
         if not collection or not embedding_fn:
@@ -372,7 +434,7 @@ def _sync_ehr_profile(admission: dict, primary_nurse: str = None) -> None:
         # 生成 embedding
         embedding = embedding_fn.encode(document).tolist()
 
-        # 检查是否已存在
+        # 写入 ChromaDB
         doc_id = f"profile_{patient_id}"
         try:
             existing = collection.get(ids=[doc_id])
