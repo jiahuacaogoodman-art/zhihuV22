@@ -161,6 +161,12 @@ class AdmissionResponse(BaseModel):
     care_level_key: Optional[str] = None
     actual_admission_date: Optional[str] = None
 
+    # 离院信息
+    discharge_date: Optional[str] = None
+    discharge_reason: Optional[str] = None
+    settlement_amount: Optional[float] = None
+    refund_amount: Optional[float] = None
+
     # 时间戳
     created_at: str = ""
     updated_at: str = ""
