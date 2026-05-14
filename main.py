@@ -59,6 +59,7 @@ from app.core.config import (
 from app.middleware.auth import AuthTokenMiddleware, ReadAuditMiddleware
 from app.routers import auth as auth_router
 from app.routers import ehr, nursing
+from app.routers import beds, care_levels, handovers, incidents, care_records
 from app.services.pii_crypto import is_encryption_enabled
 from app.services.user_store import UserStore
 
@@ -282,6 +283,11 @@ app = FastAPI(
 app.include_router(auth_router.router, prefix="/api", tags=["Auth / Users"])
 app.include_router(ehr.router, prefix="/api", tags=["EHR Management"])
 app.include_router(nursing.router, prefix="/api", tags=["Nursing Decision Support"])
+app.include_router(beds.router, prefix="/api", tags=["Bed Management"])
+app.include_router(care_levels.router, prefix="/api", tags=["Care Level"])
+app.include_router(handovers.router, prefix="/api", tags=["Handover / SBAR"])
+app.include_router(incidents.router, prefix="/api", tags=["Incident Report"])
+app.include_router(care_records.router, prefix="/api", tags=["Care Records"])
 
 # ----------------------------------------------------------------
 # 鉴权中间件：保护 /api/* 和 /uploads/*
