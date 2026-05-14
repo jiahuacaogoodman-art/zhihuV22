@@ -47,6 +47,26 @@ PERM_EHR_AUDIT_READ = "ehr.audit_read"      # 查看操作审计日志
 PERM_NURSING_DECISION = "nursing.decision"  # 调用 AI 决策 / 提示词优化
 PERM_NURSING_TASKCARD = "nursing.taskcard"  # 生成 / 更新任务卡 / 事件闭环
 
+# 床位管理
+PERM_BED_READ = "bed.read"                  # 查看床位
+PERM_BED_WRITE = "bed.write"                # 管理床位（新增/修改/分配/释放）
+
+# 护理等级
+PERM_CARE_LEVEL_READ = "care_level.read"    # 查看护理等级
+PERM_CARE_LEVEL_WRITE = "care_level.write"  # 管理护理等级
+
+# 交接班
+PERM_HANDOVER_READ = "handover.read"        # 查看交接班记录
+PERM_HANDOVER_WRITE = "handover.write"      # 创建/确认交接班
+
+# 异常事件
+PERM_INCIDENT_READ = "incident.read"        # 查看异常事件
+PERM_INCIDENT_WRITE = "incident.write"      # 上报/处理异常事件
+
+# 护理记录
+PERM_CARE_RECORD_READ = "care_record.read"  # 查看护理记录
+PERM_CARE_RECORD_WRITE = "care_record.write"  # 创建护理记录
+
 
 # ── 权限点元数据 ─────────────────────────────────────────
 @dataclass(frozen=True)
@@ -120,6 +140,71 @@ ALL_PERMISSIONS: tuple[PermissionSpec, ...] = (
         display_name="护理任务卡",
         description="生成任务卡、打卡、记录观察、归档事件",
     ),
+    # 床位管理
+    PermissionSpec(
+        perm_key=PERM_BED_READ,
+        category="bed",
+        display_name="查看床位",
+        description="查询床位列表、状态、分配情况",
+    ),
+    PermissionSpec(
+        perm_key=PERM_BED_WRITE,
+        category="bed",
+        display_name="管理床位",
+        description="新增、修改、删除床位及分配/释放",
+    ),
+    # 护理等级
+    PermissionSpec(
+        perm_key=PERM_CARE_LEVEL_READ,
+        category="care_level",
+        display_name="查看护理等级",
+        description="查询护理等级定义及老人等级分配",
+    ),
+    PermissionSpec(
+        perm_key=PERM_CARE_LEVEL_WRITE,
+        category="care_level",
+        display_name="管理护理等级",
+        description="定义等级、调整老人护理等级",
+    ),
+    # 交接班
+    PermissionSpec(
+        perm_key=PERM_HANDOVER_READ,
+        category="handover",
+        display_name="查看交接班",
+        description="查询 SBAR 交接班记录",
+    ),
+    PermissionSpec(
+        perm_key=PERM_HANDOVER_WRITE,
+        category="handover",
+        display_name="交接班操作",
+        description="创建交接记录、确认接班",
+    ),
+    # 异常事件
+    PermissionSpec(
+        perm_key=PERM_INCIDENT_READ,
+        category="incident",
+        display_name="查看异常事件",
+        description="查询异常事件列表及统计",
+    ),
+    PermissionSpec(
+        perm_key=PERM_INCIDENT_WRITE,
+        category="incident",
+        display_name="上报/处理异常事件",
+        description="上报异常事件、更新处理进度、关闭事件",
+    ),
+    # 护理记录
+    PermissionSpec(
+        perm_key=PERM_CARE_RECORD_READ,
+        category="care_record",
+        display_name="查看护理记录",
+        description="查询护理操作记录、生命体征等留痕数据",
+    ),
+    PermissionSpec(
+        perm_key=PERM_CARE_RECORD_WRITE,
+        category="care_record",
+        display_name="创建护理记录",
+        description="记录护理操作、生命体征、饮食、用药等",
+    ),
 )
 
 # 快查索引：perm_key → PermissionSpec
@@ -159,6 +244,16 @@ BUILTIN_ROLE_PERMISSIONS: dict[str, Sequence[str]] = {
         PERM_EHR_WRITE,
         PERM_NURSING_DECISION,
         PERM_NURSING_TASKCARD,
+        PERM_BED_READ,
+        PERM_BED_WRITE,
+        PERM_CARE_LEVEL_READ,
+        PERM_CARE_LEVEL_WRITE,
+        PERM_HANDOVER_READ,
+        PERM_HANDOVER_WRITE,
+        PERM_INCIDENT_READ,
+        PERM_INCIDENT_WRITE,
+        PERM_CARE_RECORD_READ,
+        PERM_CARE_RECORD_WRITE,
     ),
     BUILTIN_ROLE_CAREGIVER: (
         PERM_EHR_READ,
@@ -166,6 +261,14 @@ BUILTIN_ROLE_PERMISSIONS: dict[str, Sequence[str]] = {
         PERM_EHR_WRITE,
         PERM_NURSING_DECISION,
         PERM_NURSING_TASKCARD,
+        PERM_BED_READ,
+        PERM_CARE_LEVEL_READ,
+        PERM_HANDOVER_READ,
+        PERM_HANDOVER_WRITE,
+        PERM_INCIDENT_READ,
+        PERM_INCIDENT_WRITE,
+        PERM_CARE_RECORD_READ,
+        PERM_CARE_RECORD_WRITE,
     ),
 }
 
@@ -200,6 +303,16 @@ __all__ = [
     "PERM_EHR_AUDIT_READ",
     "PERM_NURSING_DECISION",
     "PERM_NURSING_TASKCARD",
+    "PERM_BED_READ",
+    "PERM_BED_WRITE",
+    "PERM_CARE_LEVEL_READ",
+    "PERM_CARE_LEVEL_WRITE",
+    "PERM_HANDOVER_READ",
+    "PERM_HANDOVER_WRITE",
+    "PERM_INCIDENT_READ",
+    "PERM_INCIDENT_WRITE",
+    "PERM_CARE_RECORD_READ",
+    "PERM_CARE_RECORD_WRITE",
     # structures
     "PermissionSpec",
     "ALL_PERMISSIONS",
