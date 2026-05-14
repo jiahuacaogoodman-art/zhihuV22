@@ -9,6 +9,7 @@
   - 交接班 (handovers)
   - 异常事件上报 (incidents)
   - 护理记录留痕 (care_records)
+  - 入住流程 (admissions + assessments + contracts + payments + admission_timeline)
 
 设计决策：
   - 单独 SQLite 数据库文件 local_care/care.db，与 users.db / audit.db 分离
@@ -148,6 +149,142 @@ class CareStore:
         CREATE INDEX IF NOT EXISTS idx_care_records_patient ON care_records(patient_id);
         CREATE INDEX IF NOT EXISTS idx_care_records_type ON care_records(record_type);
         CREATE INDEX IF NOT EXISTS idx_care_records_time ON care_records(recorded_at);
+
+        -- ======== 入住流程 ========
+
+        -- 入住申请主表
+        CREATE TABLE IF NOT EXISTS admissions (
+            admission_id            TEXT PRIMARY KEY,
+            status                  TEXT NOT NULL DEFAULT 'inquiry',
+
+            -- 申请人信息
+            applicant_name          TEXT NOT NULL,
+            applicant_gender        TEXT NOT NULL DEFAULT '',
+            applicant_age           INTEGER,
+            applicant_id_card       TEXT NOT NULL DEFAULT '',
+            applicant_phone         TEXT NOT NULL DEFAULT '',
+
+            -- 家属/担保人
+            guardian_name           TEXT NOT NULL DEFAULT '',
+            guardian_phone          TEXT NOT NULL DEFAULT '',
+            guardian_relation       TEXT NOT NULL DEFAULT '',
+            guardian_id_card        TEXT NOT NULL DEFAULT '',
+
+            -- 健康/需求
+            health_summary          TEXT NOT NULL DEFAULT '',
+            care_needs              TEXT NOT NULL DEFAULT '',
+            preferred_room_type     TEXT NOT NULL DEFAULT '',
+            expected_admission_date TEXT NOT NULL DEFAULT '',
+
+            -- 来源
+            referral_source         TEXT NOT NULL DEFAULT '',
+            notes                   TEXT NOT NULL DEFAULT '',
+
+            -- 评估结果(冗余存储便于列表查询)
+            assessment_id           TEXT NOT NULL DEFAULT '',
+            assessed_level          TEXT NOT NULL DEFAULT '',
+            assessment_conclusion   TEXT NOT NULL DEFAULT '',
+            assessed_at             TEXT NOT NULL DEFAULT '',
+            assessed_by             TEXT NOT NULL DEFAULT '',
+
+            -- 合同信息(冗余)
+            contract_id             TEXT NOT NULL DEFAULT '',
+            contract_signed_at      TEXT NOT NULL DEFAULT '',
+
+            -- 缴费信息(冗余)
+            payment_id              TEXT NOT NULL DEFAULT '',
+            payment_status          TEXT NOT NULL DEFAULT '',
+            paid_at                 TEXT NOT NULL DEFAULT '',
+
+            -- 入住信息
+            patient_id              TEXT NOT NULL DEFAULT '',
+            bed_id                  TEXT NOT NULL DEFAULT '',
+            bed_number              TEXT NOT NULL DEFAULT '',
+            care_level_key          TEXT NOT NULL DEFAULT '',
+            actual_admission_date   TEXT NOT NULL DEFAULT '',
+
+            created_at              TEXT NOT NULL,
+            updated_at              TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_admissions_status ON admissions(status);
+        CREATE INDEX IF NOT EXISTS idx_admissions_name ON admissions(applicant_name);
+        CREATE INDEX IF NOT EXISTS idx_admissions_patient ON admissions(patient_id);
+
+        -- 评估记录
+        CREATE TABLE IF NOT EXISTS assessments (
+            assessment_id       TEXT PRIMARY KEY,
+            admission_id        TEXT NOT NULL,
+            adl_score           INTEGER,
+            cognitive_score     INTEGER,
+            nutrition_score     INTEGER,
+            fall_risk_score     INTEGER,
+            pressure_ulcer_risk INTEGER,
+            recommended_level   TEXT NOT NULL,
+            conclusion          TEXT NOT NULL,
+            special_needs       TEXT NOT NULL DEFAULT '',
+            assessor            TEXT NOT NULL DEFAULT '',
+            assessment_date     TEXT NOT NULL,
+            approved            INTEGER NOT NULL DEFAULT 1,
+            created_at          TEXT NOT NULL,
+            FOREIGN KEY (admission_id) REFERENCES admissions(admission_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_assessments_admission ON assessments(admission_id);
+
+        -- 合同
+        CREATE TABLE IF NOT EXISTS contracts (
+            contract_id             TEXT PRIMARY KEY,
+            admission_id            TEXT NOT NULL,
+            contract_type           TEXT NOT NULL DEFAULT 'standard',
+            contract_number         TEXT NOT NULL DEFAULT '',
+            start_date              TEXT NOT NULL,
+            end_date                TEXT NOT NULL DEFAULT '',
+            care_level_key          TEXT NOT NULL,
+            monthly_fee             REAL NOT NULL DEFAULT 0,
+            deposit                 REAL NOT NULL DEFAULT 0,
+            payment_cycle           TEXT NOT NULL DEFAULT 'monthly',
+            service_scope           TEXT NOT NULL DEFAULT '',
+            special_terms           TEXT NOT NULL DEFAULT '',
+            signed_by_guardian      TEXT NOT NULL DEFAULT '',
+            signed_by_institution   TEXT NOT NULL DEFAULT '',
+            signed_at               TEXT NOT NULL DEFAULT '',
+            status                  TEXT NOT NULL DEFAULT 'active',
+            created_at              TEXT NOT NULL,
+            FOREIGN KEY (admission_id) REFERENCES admissions(admission_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_contracts_admission ON contracts(admission_id);
+        CREATE INDEX IF NOT EXISTS idx_contracts_status ON contracts(status);
+
+        -- 缴费记录
+        CREATE TABLE IF NOT EXISTS payments (
+            payment_id      TEXT PRIMARY KEY,
+            admission_id    TEXT NOT NULL,
+            contract_id     TEXT NOT NULL DEFAULT '',
+            payment_type    TEXT NOT NULL DEFAULT 'deposit',
+            amount          REAL NOT NULL,
+            payment_method  TEXT NOT NULL DEFAULT 'cash',
+            receipt_number  TEXT NOT NULL DEFAULT '',
+            period_start    TEXT NOT NULL DEFAULT '',
+            period_end      TEXT NOT NULL DEFAULT '',
+            payer           TEXT NOT NULL DEFAULT '',
+            notes           TEXT NOT NULL DEFAULT '',
+            status          TEXT NOT NULL DEFAULT 'completed',
+            paid_at         TEXT NOT NULL,
+            created_at      TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_payments_admission ON payments(admission_id);
+        CREATE INDEX IF NOT EXISTS idx_payments_contract ON payments(contract_id);
+
+        -- 入住流程时间线
+        CREATE TABLE IF NOT EXISTS admission_timeline (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            admission_id    TEXT NOT NULL,
+            timestamp       TEXT NOT NULL,
+            action          TEXT NOT NULL,
+            operator        TEXT NOT NULL DEFAULT '',
+            detail          TEXT NOT NULL DEFAULT '',
+            FOREIGN KEY (admission_id) REFERENCES admissions(admission_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_timeline_admission ON admission_timeline(admission_id);
     """
 
     def __init__(self, db_path: str | Path):
@@ -603,6 +740,322 @@ class CareStore:
         params.append(limit)
         with self._connect() as conn:
             rows = conn.execute(sql, params).fetchall()
+        return [dict(r) for r in rows]
+
+    # ================================================================
+    # 入住流程 (Admissions)
+    # ================================================================
+
+    def _add_timeline(self, conn, admission_id: str, action: str,
+                      operator: str = "", detail: str = "") -> None:
+        """向时间线表写入一条记录（需在事务内调用）"""
+        conn.execute(
+            "INSERT INTO admission_timeline (admission_id, timestamp, action, operator, detail) "
+            "VALUES (?,?,?,?,?)",
+            (admission_id, self._now(), action, operator, detail),
+        )
+
+    def create_admission(self, data: dict, operator: str = "") -> dict:
+        admission_id = self._gen_id("adm")
+        now = self._now()
+        with self._lock, self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            conn.execute(
+                "INSERT INTO admissions (admission_id, status, applicant_name, applicant_gender, "
+                "applicant_age, applicant_id_card, applicant_phone, guardian_name, guardian_phone, "
+                "guardian_relation, guardian_id_card, health_summary, care_needs, preferred_room_type, "
+                "expected_admission_date, referral_source, notes, created_at, updated_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (admission_id, "inquiry",
+                 data["applicant_name"], data.get("applicant_gender") or "",
+                 data.get("applicant_age"), data.get("applicant_id_card") or "",
+                 data.get("applicant_phone") or "",
+                 data.get("guardian_name") or "", data.get("guardian_phone") or "",
+                 data.get("guardian_relation") or "", data.get("guardian_id_card") or "",
+                 data.get("health_summary") or "", data.get("care_needs") or "",
+                 data.get("preferred_room_type") or "", data.get("expected_admission_date") or "",
+                 data.get("referral_source") or "", data.get("notes") or "",
+                 now, now),
+            )
+            self._add_timeline(conn, admission_id, "创建入住申请",
+                               operator, f"申请人: {data['applicant_name']}")
+            conn.execute("COMMIT")
+        return self.get_admission(admission_id)
+
+    def get_admission(self, admission_id: str) -> Optional[dict]:
+        with self._connect() as conn:
+            row = conn.execute("SELECT * FROM admissions WHERE admission_id = ?", (admission_id,)).fetchone()
+        return dict(row) if row else None
+
+    def list_admissions(self, status: Optional[str] = None, limit: int = 100) -> list[dict]:
+        sql = "SELECT * FROM admissions WHERE 1=1"
+        params: list = []
+        if status:
+            sql += " AND status = ?"
+            params.append(status)
+        sql += " ORDER BY created_at DESC LIMIT ?"
+        params.append(limit)
+        with self._connect() as conn:
+            rows = conn.execute(sql, params).fetchall()
+        return [dict(r) for r in rows]
+
+    def update_admission_status(self, admission_id: str, new_status: str,
+                                operator: str = "", detail: str = "",
+                                extra_fields: Optional[dict] = None) -> Optional[dict]:
+        """更新入住申请状态，同时写入时间线。extra_fields 可追加更新其它字段。"""
+        fields = ["status = ?", "updated_at = ?"]
+        params: list = [new_status, self._now()]
+        if extra_fields:
+            for k, v in extra_fields.items():
+                if v is not None:
+                    fields.append(f"{k} = ?")
+                    params.append(v)
+        params.append(admission_id)
+        with self._lock, self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            cur = conn.execute(
+                f"UPDATE admissions SET {', '.join(fields)} WHERE admission_id = ?", params
+            )
+            if cur.rowcount == 0:
+                conn.execute("ROLLBACK")
+                return None
+            self._add_timeline(conn, admission_id, f"状态变更→{new_status}",
+                               operator, detail)
+            conn.execute("COMMIT")
+        return self.get_admission(admission_id)
+
+    # ── 评估 ──
+    def create_assessment(self, admission_id: str, data: dict, operator: str = "") -> dict:
+        assessment_id = self._gen_id("asm")
+        now = self._now()
+        assessment_date = data.get("assessment_date") or now[:10]
+        with self._lock, self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            conn.execute(
+                "INSERT INTO assessments (assessment_id, admission_id, adl_score, cognitive_score, "
+                "nutrition_score, fall_risk_score, pressure_ulcer_risk, recommended_level, "
+                "conclusion, special_needs, assessor, assessment_date, approved, created_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (assessment_id, admission_id,
+                 data.get("adl_score"), data.get("cognitive_score"),
+                 data.get("nutrition_score"), data.get("fall_risk_score"),
+                 data.get("pressure_ulcer_risk"),
+                 data["recommended_level"], data["conclusion"],
+                 data.get("special_needs") or "",
+                 data.get("assessor") or operator,
+                 assessment_date,
+                 1 if data.get("approved", True) else 0,
+                 now),
+            )
+            # 更新主表冗余字段
+            new_status = "assessed" if data.get("approved", True) else "inquiry"
+            conn.execute(
+                "UPDATE admissions SET status=?, assessment_id=?, assessed_level=?, "
+                "assessment_conclusion=?, assessed_at=?, assessed_by=?, updated_at=? "
+                "WHERE admission_id=?",
+                (new_status, assessment_id, data["recommended_level"],
+                 data["conclusion"], assessment_date,
+                 data.get("assessor") or operator, now, admission_id),
+            )
+            action_detail = (f"评估{'通过' if data.get('approved', True) else '未通过'}: "
+                             f"建议等级={data['recommended_level']}")
+            self._add_timeline(conn, admission_id, "评估完成", operator, action_detail)
+            conn.execute("COMMIT")
+        return self.get_assessment(assessment_id)
+
+    def get_assessment(self, assessment_id: str) -> Optional[dict]:
+        with self._connect() as conn:
+            row = conn.execute("SELECT * FROM assessments WHERE assessment_id = ?", (assessment_id,)).fetchone()
+        if not row:
+            return None
+        d = dict(row)
+        d["approved"] = bool(d.get("approved", 1))
+        return d
+
+    def get_assessments_by_admission(self, admission_id: str) -> list[dict]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM assessments WHERE admission_id = ? ORDER BY created_at DESC",
+                (admission_id,)
+            ).fetchall()
+        result = []
+        for r in rows:
+            d = dict(r)
+            d["approved"] = bool(d.get("approved", 1))
+            result.append(d)
+        return result
+
+    # ── 合同 ──
+    def create_contract(self, admission_id: str, data: dict, operator: str = "") -> dict:
+        contract_id = self._gen_id("ctr")
+        now = self._now()
+        # 生成合同编号: CTR-YYYYMMDD-XXXX
+        contract_number = f"CTR-{now[:10].replace('-', '')}-{uuid.uuid4().hex[:4].upper()}"
+        with self._lock, self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            conn.execute(
+                "INSERT INTO contracts (contract_id, admission_id, contract_type, contract_number, "
+                "start_date, end_date, care_level_key, monthly_fee, deposit, payment_cycle, "
+                "service_scope, special_terms, signed_by_guardian, signed_by_institution, "
+                "signed_at, status, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (contract_id, admission_id,
+                 data.get("contract_type") or "standard", contract_number,
+                 data["start_date"], data.get("end_date") or "",
+                 data["care_level_key"], data["monthly_fee"],
+                 data.get("deposit") or 0, data.get("payment_cycle") or "monthly",
+                 data.get("service_scope") or "", data.get("special_terms") or "",
+                 data.get("signed_by_guardian") or "", data.get("signed_by_institution") or operator,
+                 now, "active", now),
+            )
+            # 更新主表
+            conn.execute(
+                "UPDATE admissions SET status='contracted', contract_id=?, contract_signed_at=?, "
+                "updated_at=? WHERE admission_id=?",
+                (contract_id, now, now, admission_id),
+            )
+            self._add_timeline(conn, admission_id, "合同签署",
+                               operator, f"合同号={contract_number}, 月费={data['monthly_fee']}")
+            conn.execute("COMMIT")
+        return self.get_contract(contract_id)
+
+    def get_contract(self, contract_id: str) -> Optional[dict]:
+        with self._connect() as conn:
+            row = conn.execute("SELECT * FROM contracts WHERE contract_id = ?", (contract_id,)).fetchone()
+        return dict(row) if row else None
+
+    def get_contracts_by_admission(self, admission_id: str) -> list[dict]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM contracts WHERE admission_id = ? ORDER BY created_at DESC",
+                (admission_id,)
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    # ── 缴费 ──
+    def create_payment(self, admission_id: str, data: dict, operator: str = "") -> dict:
+        payment_id = self._gen_id("pay")
+        now = self._now()
+        # 获取关联的合同ID
+        admission = self.get_admission(admission_id)
+        contract_id = admission.get("contract_id", "") if admission else ""
+        with self._lock, self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            conn.execute(
+                "INSERT INTO payments (payment_id, admission_id, contract_id, payment_type, "
+                "amount, payment_method, receipt_number, period_start, period_end, "
+                "payer, notes, status, paid_at, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (payment_id, admission_id, contract_id,
+                 data.get("payment_type") or "deposit",
+                 data["amount"], data.get("payment_method") or "cash",
+                 data.get("receipt_number") or "",
+                 data.get("period_start") or "", data.get("period_end") or "",
+                 data.get("payer") or "", data.get("notes") or "",
+                 "completed", now, now),
+            )
+            # 更新主表
+            conn.execute(
+                "UPDATE admissions SET status='paid', payment_id=?, payment_status='completed', "
+                "paid_at=?, updated_at=? WHERE admission_id=?",
+                (payment_id, now, now, admission_id),
+            )
+            self._add_timeline(conn, admission_id, "缴费完成",
+                               operator, f"金额={data['amount']}, 方式={data.get('payment_method', 'cash')}")
+            conn.execute("COMMIT")
+        return self.get_payment(payment_id)
+
+    def get_payment(self, payment_id: str) -> Optional[dict]:
+        with self._connect() as conn:
+            row = conn.execute("SELECT * FROM payments WHERE payment_id = ?", (payment_id,)).fetchone()
+        return dict(row) if row else None
+
+    def get_payments_by_admission(self, admission_id: str) -> list[dict]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM payments WHERE admission_id = ? ORDER BY created_at DESC",
+                (admission_id,)
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    # ── 办理入住 ──
+    def move_in(self, admission_id: str, bed_id: str, care_level_key: Optional[str] = None,
+                patient_id: Optional[str] = None, admission_date: Optional[str] = None,
+                operator: str = "") -> Optional[dict]:
+        """办理入住：分配床位 + 更新入住状态"""
+        now = self._now()
+        admission = self.get_admission(admission_id)
+        if not admission:
+            return None
+        # 生成 patient_id (如果没有提供)
+        if not patient_id:
+            patient_id = self._gen_id("P")
+        # 确定护理等级(优先参数 > 合同 > 评估)
+        if not care_level_key:
+            if admission.get("contract_id"):
+                contract = self.get_contract(admission["contract_id"])
+                if contract:
+                    care_level_key = contract.get("care_level_key", "")
+            if not care_level_key:
+                care_level_key = admission.get("assessed_level", "")
+        # 分配床位
+        bed = self.assign_bed(bed_id, patient_id, admission.get("applicant_name", ""))
+        if not bed:
+            return None
+        actual_date = admission_date or now[:10]
+        with self._lock, self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            conn.execute(
+                "UPDATE admissions SET status='active', patient_id=?, bed_id=?, bed_number=?, "
+                "care_level_key=?, actual_admission_date=?, updated_at=? WHERE admission_id=?",
+                (patient_id, bed_id, bed.get("bed_number", ""),
+                 care_level_key, actual_date, now, admission_id),
+            )
+            self._add_timeline(conn, admission_id, "办理入住",
+                               operator, f"床位={bed.get('bed_number', '')}, 等级={care_level_key}")
+            conn.execute("COMMIT")
+        # 分配护理等级
+        if care_level_key:
+            try:
+                self.assign_care_level(patient_id, care_level_key,
+                                       reason="入住评估", assessed_by=operator)
+            except ValueError:
+                pass  # 等级不存在时不阻断入住
+        return self.get_admission(admission_id)
+
+    # ── 离院 ──
+    def discharge(self, admission_id: str, data: dict, operator: str = "") -> Optional[dict]:
+        now = self._now()
+        admission = self.get_admission(admission_id)
+        if not admission:
+            return None
+        with self._lock, self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            conn.execute(
+                "UPDATE admissions SET status='discharged', updated_at=? WHERE admission_id=?",
+                (now, admission_id),
+            )
+            detail_parts = []
+            if data.get("discharge_reason"):
+                detail_parts.append(f"原因={data['discharge_reason']}")
+            if data.get("settlement_amount") is not None:
+                detail_parts.append(f"结算={data['settlement_amount']}")
+            if data.get("refund_amount") is not None:
+                detail_parts.append(f"退费={data['refund_amount']}")
+            self._add_timeline(conn, admission_id, "办理离院",
+                               operator, "; ".join(detail_parts) or "正常离院")
+            conn.execute("COMMIT")
+        # 释放床位
+        if admission.get("bed_id"):
+            self.release_bed(admission["bed_id"])
+        return self.get_admission(admission_id)
+
+    # ── 时间线 ──
+    def get_admission_timeline(self, admission_id: str) -> list[dict]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT timestamp, action, operator, detail FROM admission_timeline "
+                "WHERE admission_id = ? ORDER BY id ASC",
+                (admission_id,)
+            ).fetchall()
         return [dict(r) for r in rows]
 
 
