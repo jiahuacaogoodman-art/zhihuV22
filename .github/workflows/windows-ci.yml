@@ -100,27 +100,29 @@ jobs:
           # 我们只关心：脚本本身能跑完不抛 PowerShell 异常 + 输出正常。
           # preflight 在 GitHub runner 上会因 Docker Desktop 不可用而 FAIL，
           # 但脚本流程必须完整、不能命令未找到。
+          # 重定向所有流到文件后 Get-Content 检查，避免 Write-Host 流捕获问题。
           $ErrorActionPreference = 'Continue'
-          $output = & ./scripts/preflight.ps1 -Quick 2>&1
-          $output | ForEach-Object { Write-Host $_ }
+          & ./scripts/preflight.ps1 -Quick *> preflight_out.log
+          $combined = Get-Content preflight_out.log -Raw -Encoding UTF8
+          Write-Host '--- preflight output ---'
+          Write-Host $combined
+          Write-Host '--- end ---'
 
-          # 1. 不能有未处理的 PowerShell 异常（命令未找到等）
-          $errLines = $output | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] }
-          if ($errLines) {
-              Write-Error "preflight produced PowerShell errors"
-              exit 1
-          }
-
-          # 2. 输出中必须包含汇总
-          if ($output -notmatch '汇总') {
+          # 1. 输出中必须包含汇总（脚本完整跑完）
+          if ($combined -notmatch '汇总') {
               Write-Error "preflight did not reach summary section"
               exit 1
           }
 
-          # 3. 中文必须能正常显示（不能有锟斤拷之类乱码标志）
-          $mojibake = $output | Where-Object { $_ -match '锟|烫|拷' }
-          if ($mojibake) {
+          # 2. 中文必须能正常显示（不能有锟斤拷之类乱码标志）
+          if ($combined -match '锟|烫|拷') {
               Write-Error "preflight output contains mojibake (encoding issue)"
+              exit 1
+          }
+
+          # 3. 不能有未识别的命令（PSCommandNotFoundException 信号）
+          if ($combined -match 'is not recognized as a name of a cmdlet|CommandNotFoundException') {
+              Write-Error "preflight has unresolved cmdlet references"
               exit 1
           }
 
@@ -146,15 +148,14 @@ jobs:
         shell: pwsh
         run: docker --version
 
-      - name: Run setup.ps1 -NonInteractive
+      - name: Run setup.ps1 -DryRun -NonInteractive
         shell: pwsh
         run: |
-          # 触发 setup.ps1 但跳过 preflight（runner 上没 GPU/Hyper-V）。
-          # NonInteractive 模式 + stdin pipe 'n' 应答"确认启动部署"提示，
-          # 让脚本生成 .env 后停在 Step 6（不真启动 docker compose）。
+          # -DryRun: 让 setup.ps1 在写完 .env 后退出，不真启动 docker compose。
+          # 这是 CI 必须的，否则 Windows runner 的 Docker 默认是 Windows native
+          # containers 模式，拉 ollama/ollama 这类 Linux 镜像会立刻失败。
           $ErrorActionPreference = 'Continue'
-          $output = "n`n" | & ./scripts/setup.ps1 -SkipPreflight -NonInteractive 2>&1
-          $output | ForEach-Object { Write-Host $_ }
+          & ./scripts/setup.ps1 -SkipPreflight -NonInteractive -DryRun
 
           if (-not (Test-Path .env)) {
               Write-Error '.env was not created'
@@ -237,19 +238,22 @@ jobs:
       - name: Run backup.ps1 with no volumes - should exit 1 cleanly
         shell: pwsh
         run: |
+          # Write-Host 在 PS7 走 information stream (6)。要把它跟 stderr 一起
+          # 捕获到变量做匹配，最稳的做法是先重定向到文件，再 Get-Content。
+          # 直接 *>&1 在某些 PS 版本上对 Write-Host 不可靠。
           $ErrorActionPreference = 'Continue'
-          $output = & ./scripts/backup.ps1 2>&1
+          & ./scripts/backup.ps1 *> backup_out.log
           $exitCode = $LASTEXITCODE
-          $output | ForEach-Object { Write-Host $_ }
+          $combined = Get-Content backup_out.log -Raw -Encoding UTF8
+          Write-Host '--- backup.ps1 output ---'
+          Write-Host $combined
+          Write-Host '--- end ---'
 
           if ($exitCode -ne 1) {
               Write-Error "backup.ps1 should exit 1 when no volumes exist (got $exitCode)"
               exit 1
           }
-
-          # 必须有清晰的中文错误说明
-          $hasMessage = $output -match '没有任何业务卷可备份|未找到'
-          if (-not $hasMessage) {
+          if ($combined -notmatch '没有任何业务卷可备份|未找到') {
               Write-Error 'backup.ps1 should print user-friendly error message'
               exit 1
           }
