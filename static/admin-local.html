@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>智护银伴 · 本机管理员控制台</title>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --card: rgba(255,255,255,.86);
+      --line: #e5e7eb;
+      --text: #111827;
+      --muted: #6b7280;
+      --brand: #2563eb;
+      --brand2: #0f766e;
+      --ok: #16a34a;
+      --warn: #d97706;
+      --bad: #dc2626;
+      --shadow: 0 18px 55px rgba(15,23,42,.08);
+      --radius: 22px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 12% 10%, rgba(37,99,235,.12), transparent 28%),
+        radial-gradient(circle at 80% 0%, rgba(20,184,166,.13), transparent 32%),
+        linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%);
+      min-height: 100vh;
+    }
+    .wrap { max-width: 1220px; margin: 0 auto; padding: 28px; }
+    .hero {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 22px;
+    }
+    h1 { margin: 0; font-size: 30px; letter-spacing: -.04em; }
+    .sub { color: var(--muted); margin-top: 8px; line-height: 1.6; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,.72);
+      border-radius: 999px;
+      padding: 9px 13px;
+      font-size: 13px;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--warn); }
+    .dot.ok { background: var(--ok); }
+    .dot.bad { background: var(--bad); }
+    .grid { display: grid; grid-template-columns: 1.1fr .9fr; gap: 18px; }
+    .cards { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 14px; margin-bottom: 18px; }
+    .card {
+      background: var(--card);
+      border: 1px solid rgba(226,232,240,.82);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(16px);
+      padding: 18px;
+    }
+    .card h2 { margin: 0 0 14px; font-size: 18px; letter-spacing: -.02em; }
+    .metric .label { color: var(--muted); font-size: 13px; }
+    .metric .value { margin-top: 8px; font-size: 22px; font-weight: 750; }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 12px;
+      font-weight: 700;
+      background: #eff6ff;
+      color: #1d4ed8;
+      border: 1px solid #bfdbfe;
+    }
+    .pill.ok { background: #ecfdf5; color: #047857; border-color: #bbf7d0; }
+    .pill.warn { background: #fffbeb; color: #b45309; border-color: #fde68a; }
+    .pill.bad { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
+    .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .kv { display: grid; grid-template-columns: 150px 1fr; gap: 10px; font-size: 14px; padding: 9px 0; border-bottom: 1px solid #eef2f7; }
+    .kv:last-child { border-bottom: 0; }
+    .kv span:first-child { color: var(--muted); }
+    input, select {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 11px 12px;
+      background: rgba(255,255,255,.86);
+      outline: none;
+      font-size: 14px;
+    }
+    input:focus, select:focus { border-color: #93c5fd; box-shadow: 0 0 0 4px rgba(59,130,246,.12); }
+    label { display: block; color: var(--muted); font-size: 13px; margin-bottom: 6px; }
+    .form { display: grid; gap: 12px; }
+    .form.two { grid-template-columns: 1fr 1fr; }
+    button {
+      border: 0;
+      background: linear-gradient(135deg, var(--brand), #4f46e5);
+      color: white;
+      border-radius: 14px;
+      padding: 11px 14px;
+      font-weight: 750;
+      cursor: pointer;
+      box-shadow: 0 10px 25px rgba(37,99,235,.22);
+    }
+    button.secondary { background: #111827; box-shadow: none; }
+    button.ghost { background: white; color: #111827; border: 1px solid var(--line); box-shadow: none; }
+    button.danger { background: linear-gradient(135deg, #dc2626, #b91c1c); box-shadow: none; }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid #eef2f7; vertical-align: top; }
+    th { color: var(--muted); font-weight: 700; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .notice {
+      border-radius: 18px;
+      padding: 14px 15px;
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      color: #92400e;
+      line-height: 1.55;
+      margin-bottom: 18px;
+    }
+    .notice.bad { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
+    .secret {
+      background: #0f172a;
+      color: #e2e8f0;
+      border-radius: 16px;
+      padding: 14px;
+      overflow: auto;
+      user-select: all;
+      line-height: 1.55;
+      display: none;
+    }
+    .muted { color: var(--muted); }
+    .footer { color: var(--muted); font-size: 12px; margin-top: 20px; line-height: 1.6; }
+    @media (max-width: 980px) {
+      .grid, .cards, .form.two { grid-template-columns: 1fr; }
+      .hero { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="hero">
+      <div>
+        <h1>智护银伴 · 本机管理员控制台</h1>
+        <div class="sub">用于本机维护：服务健康检查、鉴权状态、用户与 API Key 管理。建议只从部署机器本机打开。</div>
+      </div>
+      <div class="badge"><span id="localDot" class="dot"></span><span id="localText">检测访问来源...</span></div>
+    </div>
+
+    <div id="remoteBlock" class="notice bad" style="display:none">
+      当前不是本机访问。为避免 Token 管理暴露到局域网，本页面已停止工作。请在部署机器上访问 <span class="mono">http://127.0.0.1:8000/static/admin-local.html</span>。
+    </div>
+
+    <div class="cards">
+      <div class="card metric"><div class="label">后端服务</div><div id="mStatus" class="value">--</div></div>
+      <div class="card metric"><div class="label">鉴权模式</div><div id="mAuth" class="value">--</div></div>
+      <div class="card metric"><div class="label">RAG / 加密</div><div id="mSecurity" class="value">--</div></div>
+    </div>
+
+    <div class="grid">
+      <div>
+        <div class="card">
+          <div class="row" style="justify-content:space-between;margin-bottom:12px">
+            <h2>系统状态</h2>
+            <button class="ghost" onclick="refreshAll()">刷新</button>
+          </div>
+          <div id="healthRows"></div>
+        </div>
+
+        <div class="card" style="margin-top:18px">
+          <h2>用户列表</h2>
+          <div class="notice">需要拥有 <span class="mono">users.manage</span> 权限的管理员 Token。Token 只保存在当前浏览器 Session，不写入 localStorage。</div>
+          <table>
+            <thead><tr><th>用户名</th><th>显示名</th><th>角色</th><th>状态</th><th>ID</th></tr></thead>
+            <tbody id="usersBody"><tr><td colspan="5" class="muted">尚未加载</td></tr></tbody>
+          </table>
+        </div>
+
+        <div class="card" style="margin-top:18px">
+          <h2>API Key 列表</h2>
+          <table>
+            <thead><tr><th>前缀</th><th>用户</th><th>标签</th><th>状态</th><th>操作</th></tr></thead>
+            <tbody id="tokensBody"><tr><td colspan="5" class="muted">尚未加载</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div>
+        <div class="card">
+          <h2>管理员 Token</h2>
+          <div class="form">
+            <div>
+              <label>X-Auth-Token</label>
+              <input id="adminToken" type="password" placeholder="粘贴管理员 API Key" />
+            </div>
+            <div class="row">
+              <button onclick="saveToken()">保存到本次会话</button>
+              <button class="ghost" onclick="clearToken()">清除</button>
+            </div>
+            <div id="meBox" class="muted">未验证身份</div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:18px">
+          <h2>新建用户</h2>
+          <div class="form">
+            <div><label>用户名</label><input id="newUsername" placeholder="例如 nurse01" /></div>
+            <div><label>显示名</label><input id="newDisplayName" placeholder="例如 护士站一号" /></div>
+            <div><label>角色</label><select id="newRole"><option value="admin">admin</option><option value="nurse">nurse</option><option value="caregiver">caregiver</option></select></div>
+            <button onclick="createUser()">创建用户</button>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:18px">
+          <h2>签发 API Key</h2>
+          <div class="form">
+            <div><label>用户 ID</label><input id="tokenUserId" placeholder="从用户列表复制 user_id" /></div>
+            <div><label>标签</label><input id="tokenLabel" placeholder="例如 护士站平板 / 管理端浏览器" /></div>
+            <button onclick="createToken()">签发 Token</button>
+            <pre id="secretBox" class="secret"></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      说明：<span class="mono">/health</span> 继续保留为机器探针；本页面是人看的本机维护台。当前页面会拒绝非 localhost/127.0.0.1 访问，但后端 API 仍以 RBAC Token 权限为准。
+    </div>
+  </div>
+
+  <script>
+    const localHosts = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
+    const isLocal = localHosts.has(location.hostname) || location.hostname.startsWith('127.');
+    const localDot = document.getElementById('localDot');
+    const localText = document.getElementById('localText');
+    const remoteBlock = document.getElementById('remoteBlock');
+
+    if (!isLocal) {
+      localDot.className = 'dot bad';
+      localText.textContent = '非本机访问，已禁用';
+      remoteBlock.style.display = 'block';
+      document.querySelectorAll('button,input,select').forEach(el => el.disabled = true);
+    } else {
+      localDot.className = 'dot ok';
+      localText.textContent = '本机访问';
+    }
+
+    const $ = (id) => document.getElementById(id);
+    const tokenHeaders = () => {
+      const token = sessionStorage.getItem('yinban_admin_token') || $('adminToken').value.trim();
+      return token ? {'X-Auth-Token': token, 'Content-Type': 'application/json'} : {'Content-Type': 'application/json'};
+    };
+
+    function pill(value, okText=true) {
+      const cls = value === true || value === 'ok' || value === 'user_store' ? 'ok' : (value ? 'warn' : 'bad');
+      return `<span class="pill ${cls}">${String(value)}</span>`;
+    }
+
+    async function api(path, options={}) {
+      const resp = await fetch(path, { ...options, headers: { ...tokenHeaders(), ...(options.headers || {}) } });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data.detail || data.message || `HTTP ${resp.status}`);
+      return data;
+    }
+
+    async function loadHealth() {
+      try {
+        const h = await api('/health', {headers:{}});
+        $('mStatus').innerHTML = '<span class="pill ok">ok</span>';
+        $('mAuth').innerHTML = pill(h.auth_mode);
+        $('mSecurity').innerHTML = `${pill(h.rag_available)} ${pill(h.pii_encryption_enabled)}`;
+        const rows = [
+          ['服务状态', pill(h.status)],
+          ['项目目录', `<span class="mono">${h.base_dir || '--'}</span>`],
+          ['静态目录', pill(h.static_dir_exists)],
+          ['首页文件', pill(h.index_html_exists)],
+          ['PII 加密', pill(h.pii_encryption_enabled)],
+          ['鉴权模式', pill(h.auth_mode)],
+          ['LLM Provider', `<span class="mono">${h.llm_provider || '--'}</span>`],
+          ['RAG 可用', pill(h.rag_available)]
+        ];
+        $('healthRows').innerHTML = rows.map(([k,v]) => `<div class="kv"><span>${k}</span><span>${v}</span></div>`).join('');
+      } catch (e) {
+        $('mStatus').innerHTML = '<span class="pill bad">down</span>';
+        $('healthRows').innerHTML = `<div class="notice bad">健康检查失败：${e.message}</div>`;
+      }
+    }
+
+    function saveToken() {
+      const t = $('adminToken').value.trim();
+      if (!t) return alert('请先粘贴管理员 Token');
+      sessionStorage.setItem('yinban_admin_token', t);
+      refreshAll();
+    }
+    function clearToken() {
+      sessionStorage.removeItem('yinban_admin_token');
+      $('adminToken').value = '';
+      $('meBox').textContent = '已清除本次会话 Token';
+    }
+
+    async function loadMe() {
+      try {
+        const me = await api('/api/auth/me');
+        $('meBox').innerHTML = `当前用户：<b>${me.user?.username || 'unknown'}</b> / ${me.user?.role || '--'}<br><span class="muted">权限：${(me.permissions || []).join(', ')}</span>`;
+      } catch (e) {
+        $('meBox').innerHTML = `<span style="color:#dc2626">身份验证失败：${e.message}</span>`;
+      }
+    }
+
+    async function loadUsers() {
+      try {
+        const data = await api('/api/auth/users?include_inactive=true');
+        $('usersBody').innerHTML = data.users.map(u => `<tr><td>${u.username}</td><td>${u.display_name || ''}</td><td>${u.role}</td><td>${u.active ? 'active' : 'inactive'}</td><td class="mono">${u.user_id}</td></tr>`).join('') || '<tr><td colspan="5" class="muted">无用户</td></tr>';
+      } catch (e) {
+        $('usersBody').innerHTML = `<tr><td colspan="5" style="color:#dc2626">${e.message}</td></tr>`;
+      }
+    }
+
+    async function loadTokens() {
+      try {
+        const data = await api('/api/auth/tokens?include_revoked=true');
+        $('tokensBody').innerHTML = data.keys.map(k => `<tr><td class="mono">${k.token_prefix || ''}...</td><td class="mono">${k.user_id}</td><td>${k.label || ''}</td><td>${k.revoked ? 'revoked' : 'active'}</td><td>${k.revoked ? '' : `<button class="danger" onclick="revokeToken('${k.key_id}')">吊销</button>`}</td></tr>`).join('') || '<tr><td colspan="5" class="muted">无 Token</td></tr>';
+      } catch (e) {
+        $('tokensBody').innerHTML = `<tr><td colspan="5" style="color:#dc2626">${e.message}</td></tr>`;
+      }
+    }
+
+    async function createUser() {
+      try {
+        await api('/api/auth/users', {method:'POST', body: JSON.stringify({username:$('newUsername').value.trim(), display_name:$('newDisplayName').value.trim(), role:$('newRole').value})});
+        await loadUsers();
+        alert('用户已创建');
+      } catch (e) { alert(e.message); }
+    }
+
+    async function createToken() {
+      try {
+        const data = await api('/api/auth/tokens', {method:'POST', body: JSON.stringify({user_id:$('tokenUserId').value.trim(), label:$('tokenLabel').value.trim()})});
+        $('secretBox').style.display = 'block';
+        $('secretBox').textContent = `API Key 明文只显示一次，请立即复制保存：\n\n${data.token}`;
+        await loadTokens();
+      } catch (e) { alert(e.message); }
+    }
+
+    async function revokeToken(keyId) {
+      if (!confirm('确定吊销该 API Key？')) return;
+      try { await api(`/api/auth/tokens/${keyId}`, {method:'DELETE'}); await loadTokens(); }
+      catch (e) { alert(e.message); }
+    }
+
+    async function refreshAll() {
+      if (!isLocal) return;
+      await loadHealth();
+      await loadMe();
+      await loadUsers();
+      await loadTokens();
+    }
+
+    if (isLocal) {
+      const cached = sessionStorage.getItem('yinban_admin_token');
+      if (cached) $('adminToken').value = cached;
+      refreshAll();
+    }
+  </script>
+</body>
+</html>
