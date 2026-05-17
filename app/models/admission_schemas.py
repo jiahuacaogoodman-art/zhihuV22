@@ -355,6 +355,41 @@ class AdmissionTimelineResponse(_CodeMessage):
     timeline: List[AdmissionTimelineEntry] = Field(default_factory=list)
 
 
+# ============================================================
+# 8. 经营统计（院长仪表盘）
+# ============================================================
+class AdmissionStatsRecent(BaseModel):
+    """近 N 天滚动窗口指标"""
+    period: str
+    new_admissions: int = 0
+    moved_in: int = 0
+    discharged: int = 0
+    revenue: float = 0.0
+
+
+class AdmissionStatsOccupancy(BaseModel):
+    occupied_beds: int = 0
+    total_beds: int = 0
+    occupancy_rate: Optional[float] = None  # 0..1，无床位时为 null
+
+
+class AdmissionStatsConversion(BaseModel):
+    inquiry_to_active: Optional[float] = None  # 0..1，无申请时为 null
+
+
+class AdmissionStatsResponse(_CodeMessage):
+    """GET /api/admissions/stats —— 经营统计聚合"""
+    total: int = 0
+    active_residents: int = 0
+    discharged: int = 0
+    by_status: dict[str, int] = Field(default_factory=dict)
+    by_referral: dict[str, int] = Field(default_factory=dict)
+    recent: AdmissionStatsRecent
+    revenue_total: float = 0.0
+    occupancy: AdmissionStatsOccupancy
+    conversion: AdmissionStatsConversion
+
+
 __all__ = [
     "AdmissionStatus", "VALID_TRANSITIONS",
     "AdmissionCreateRequest", "AdmissionResponse", "AdmissionListResponse",
@@ -363,4 +398,6 @@ __all__ = [
     "PaymentCreateRequest", "PaymentResponse", "PaymentListResponse",
     "MoveInRequest", "StatusChangeRequest", "DischargeRequest",
     "AdmissionTimelineEntry", "AdmissionTimelineResponse",
+    "AdmissionStatsRecent", "AdmissionStatsOccupancy", "AdmissionStatsConversion",
+    "AdmissionStatsResponse",
 ]

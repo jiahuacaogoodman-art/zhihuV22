@@ -25,6 +25,7 @@ from app.models.admission_schemas import (
     AdmissionStatus,
     VALID_TRANSITIONS,
     AdmissionCreateRequest, AdmissionListResponse, AdmissionResponse,
+    AdmissionStatsResponse,
     AdmissionTimelineEntry, AdmissionTimelineResponse,
     AssessmentResponse, AssessmentSubmitRequest,
     ContractCreateRequest, ContractResponse,
@@ -103,6 +104,31 @@ async def list_admissions(
         code=200, total=len(admissions),
         admissions=[AdmissionResponse(**_mask_admission_response(a)) for a in admissions],
     )
+
+
+# 注意：/admissions/stats 必须放在 /admissions/{admission_id} 之前，
+# 否则 FastAPI 会把 "stats" 当成 admission_id 路由到详情接口。
+@router.get("/admissions/stats", response_model=AdmissionStatsResponse,
+            summary="入住流程经营统计(院长仪表盘)")
+async def get_admission_stats(
+    days: int = Query(default=30, ge=1, le=365,
+                      description="近 N 天滚动窗口（默认30天，最长1年）"),
+    user: User = Depends(require_permission(PERM_EHR_READ)),
+):
+    """聚合入住流程关键经营指标，供院长仪表盘使用。
+
+    返回内容包括：
+      - total / active_residents / discharged：累计与当前入住情况
+      - by_status：按状态分布（漏斗分析用）
+      - by_referral：按来源渠道分布（推广效果用）
+      - recent.{new_admissions, moved_in, discharged, revenue}：近 N 天动向
+      - revenue_total：累计已完成支付总额（仅 status='completed'）
+      - occupancy：床位占用率
+      - conversion.inquiry_to_active：咨询→入住转化率
+    """
+    store = get_care_store()
+    stats = store.get_admission_stats(days=days)
+    return AdmissionStatsResponse(code=200, **stats)
 
 
 @router.get("/admissions/{admission_id}", response_model=AdmissionResponse, summary="查询单个入住申请")

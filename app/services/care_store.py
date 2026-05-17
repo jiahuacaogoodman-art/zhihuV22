@@ -295,16 +295,99 @@ class CareStore:
         CREATE INDEX IF NOT EXISTS idx_timeline_admission ON admission_timeline(admission_id);
     """
 
+    # ── Schema 版本号 ──────────────────────────────────────
+    # 每次需要给已部署的库加列/补索引时，把这个数 +1，并在 _migrate 里加 case。
+    # 老库启动时会按 user_version 顺序执行所有未跑过的迁移；新库 _CREATE_SQL
+    # 已包含全部列，会被 _migrate 一次性提升到 _SCHEMA_VERSION。
+    _SCHEMA_VERSION: int = 1
+
     def __init__(self, db_path: str | Path):
         self._path = str(db_path)
         self._lock = threading.Lock()
         self._init_db()
+        # ⚠️ 生产风险修复：旧库启动时必须跑迁移，把 _CREATE_SQL 之后新增的列补齐
+        # （CREATE TABLE IF NOT EXISTS 不会给老表加列，老库会因缺列在写入时崩）
+        self._migrate()
 
     def _init_db(self) -> None:
         Path(self._path).parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as conn:
             conn.executescript(self._CREATE_SQL)
         logger.debug(f"CareStore 初始化完成: {self._path}")
+
+    # ────────────────────────────────────────────────────────
+    # Schema 迁移（idempotent forward-only）
+    # ────────────────────────────────────────────────────────
+    # 设计要点
+    #   · 用 SQLite PRAGMA user_version 记录当前 schema 版本，每次启动按需推进
+    #   · ALTER TABLE ADD COLUMN 不支持 IF NOT EXISTS，先用 PRAGMA table_info 自检
+    #   · 整个迁移在单一事务内完成，失败回滚，user_version 不会半截推进
+    #   · 仅向前迁移（新增列/索引），不做 DROP；删除字段必须走人工运维 + 备份
+    #   · 单一并发：_lock 确保同一进程内只有一个线程在跑
+    #
+    # 历史上这个 store 曾发生过的修复：
+    #   · admissions 表新增 4 个离院财务字段（discharge_date/discharge_reason/
+    #     settlement_amount/refund_amount）。早期版本没这些列。
+    #   · admissions(applicant_id_card) 唯一索引（防同一身份证重复在册）。
+    # 这两项都已纳入 _CREATE_SQL；_migrate 负责把**老库**也补齐。
+
+    @staticmethod
+    def _columns_of(conn: sqlite3.Connection, table: str) -> set[str]:
+        rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+        return {r["name"] for r in rows}
+
+    @staticmethod
+    def _add_column_if_missing(
+        conn: sqlite3.Connection, table: str, column: str, decl: str,
+    ) -> bool:
+        """ALTER TABLE ADD COLUMN（仅当列不存在时执行）。返回是否真的加了。"""
+        if column in CareStore._columns_of(conn, table):
+            return False
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
+        return True
+
+    def _migrate(self) -> None:
+        with self._lock, self._connect() as conn:
+            current = conn.execute("PRAGMA user_version").fetchone()[0]
+            target = self._SCHEMA_VERSION
+            if current >= target:
+                return
+            logger.info(f"CareStore 迁移: user_version {current} → {target}")
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                # ── v1：admissions 离院财务字段 + 身份证去重唯一索引 ─────
+                # 早于 v1 的库（current == 0）可能没有以下列，必须补齐。
+                if current < 1:
+                    added: list[str] = []
+                    for col, decl in (
+                        ("discharge_date",     "TEXT NOT NULL DEFAULT ''"),
+                        ("discharge_reason",   "TEXT NOT NULL DEFAULT ''"),
+                        ("settlement_amount",  "REAL"),
+                        ("refund_amount",      "REAL"),
+                    ):
+                        if self._add_column_if_missing(conn, "admissions", col, decl):
+                            added.append(col)
+                    if added:
+                        logger.info(f"CareStore 迁移 v1: admissions 表新增列 {added}")
+
+                    # 身份证唯一索引（CREATE INDEX IF NOT EXISTS 已幂等，
+                    # 这里再写一次是为了让"老库没跑过 _CREATE_SQL 新版本"也能补上）
+                    conn.execute(
+                        "CREATE UNIQUE INDEX IF NOT EXISTS idx_admissions_id_card_uniq "
+                        "ON admissions(applicant_id_card) "
+                        "WHERE applicant_id_card != '' "
+                        "AND status NOT IN ('discharged', 'cancelled')"
+                    )
+
+                # 推进 user_version
+                # （PRAGMA user_version 不支持参数绑定，只能字符串拼接整数）
+                conn.execute(f"PRAGMA user_version = {target}")
+                conn.execute("COMMIT")
+                logger.success(f"CareStore 迁移完成: → user_version={target}")
+            except Exception:
+                conn.execute("ROLLBACK")
+                logger.exception("CareStore 迁移失败，已回滚")
+                raise
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self._path, check_same_thread=False, isolation_level=None)
@@ -1106,6 +1189,125 @@ class CareStore:
                 (admission_id,)
             ).fetchall()
         return [dict(r) for r in rows]
+
+    # ── 统计（院长仪表盘）──────────────────────────────────
+    def get_admission_stats(self, days: int = 30) -> dict:
+        """入住流程经营统计 —— 院长仪表盘核心数据。
+
+        返回结构：
+          {
+            "total":              累计入住申请数（全历史）
+            "active_residents":   当前已入住人数（status=active）
+            "discharged":         累计离院数
+            "by_status":          {status: count}（全部状态分布）
+            "by_referral":        {source: count}  来源渠道转化分析
+            "recent": {
+              "period":            f"近{days}天",
+              "new_admissions":    近 N 天新申请数
+              "moved_in":          近 N 天实际入住数（actual_admission_date 落在窗口）
+              "discharged":        近 N 天离院数（discharge_date 落在窗口）
+              "revenue":           近 N 天 payments.amount 之和
+            },
+            "revenue_total":      累计 payments.amount 之和
+            "occupancy": {
+              "occupied_beds":    当前 status='occupied' 床位数
+              "total_beds":       床位总数
+              "occupancy_rate":   occupied / total（无床位时为 None）
+            },
+            "conversion": {
+              "inquiry_to_active":  累计 active+discharged 占累计 total 的比例
+            }
+          }
+        """
+        from datetime import timedelta
+        cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
+
+        with self._connect() as conn:
+            # 总数 / 状态分布
+            total = conn.execute("SELECT COUNT(*) AS c FROM admissions").fetchone()["c"]
+            by_status: dict[str, int] = {}
+            for r in conn.execute(
+                "SELECT status, COUNT(*) AS c FROM admissions GROUP BY status"
+            ).fetchall():
+                by_status[r["status"]] = r["c"]
+            active_residents = by_status.get("active", 0)
+            discharged_total = by_status.get("discharged", 0)
+
+            # 来源渠道
+            by_referral: dict[str, int] = {}
+            for r in conn.execute(
+                "SELECT COALESCE(NULLIF(referral_source, ''), '未填写') AS src, "
+                "COUNT(*) AS c FROM admissions GROUP BY src"
+            ).fetchall():
+                by_referral[r["src"]] = r["c"]
+
+            # 近 N 天指标
+            new_admissions_recent = conn.execute(
+                "SELECT COUNT(*) AS c FROM admissions WHERE created_at >= ?",
+                (cutoff,),
+            ).fetchone()["c"]
+            # actual_admission_date 是日期 'YYYY-MM-DD'，与 cutoff 的 YYYY-MM-DD 部分比较
+            cutoff_date = cutoff[:10]
+            moved_in_recent = conn.execute(
+                "SELECT COUNT(*) AS c FROM admissions "
+                "WHERE actual_admission_date != '' AND actual_admission_date >= ?",
+                (cutoff_date,),
+            ).fetchone()["c"]
+            discharged_recent = conn.execute(
+                "SELECT COUNT(*) AS c FROM admissions "
+                "WHERE discharge_date != '' AND discharge_date >= ?",
+                (cutoff_date,),
+            ).fetchone()["c"]
+
+            # 营收：仅算 status='completed' 的支付，避免把退款/挂起项算进来
+            revenue_recent = conn.execute(
+                "SELECT COALESCE(SUM(amount), 0) AS s FROM payments "
+                "WHERE status = 'completed' AND paid_at >= ?",
+                (cutoff,),
+            ).fetchone()["s"]
+            revenue_total = conn.execute(
+                "SELECT COALESCE(SUM(amount), 0) AS s FROM payments WHERE status = 'completed'"
+            ).fetchone()["s"]
+
+            # 床位占用
+            occupied_beds = conn.execute(
+                "SELECT COUNT(*) AS c FROM beds WHERE status = 'occupied'"
+            ).fetchone()["c"]
+            total_beds = conn.execute("SELECT COUNT(*) AS c FROM beds").fetchone()["c"]
+
+        # 占用率（避免除零）
+        occupancy_rate: Optional[float] = None
+        if total_beds > 0:
+            occupancy_rate = round(occupied_beds / total_beds, 4)
+
+        # 转化率：累计走到入住或离院的占累计申请的比例
+        conversion: Optional[float] = None
+        if total > 0:
+            conversion = round((active_residents + discharged_total) / total, 4)
+
+        return {
+            "total": total,
+            "active_residents": active_residents,
+            "discharged": discharged_total,
+            "by_status": by_status,
+            "by_referral": by_referral,
+            "recent": {
+                "period": f"近{days}天",
+                "new_admissions": new_admissions_recent,
+                "moved_in": moved_in_recent,
+                "discharged": discharged_recent,
+                "revenue": float(revenue_recent or 0),
+            },
+            "revenue_total": float(revenue_total or 0),
+            "occupancy": {
+                "occupied_beds": occupied_beds,
+                "total_beds": total_beds,
+                "occupancy_rate": occupancy_rate,
+            },
+            "conversion": {
+                "inquiry_to_active": conversion,
+            },
+        }
 
 
 # ── 全局 singleton 工厂 ────────────────────────────────────
